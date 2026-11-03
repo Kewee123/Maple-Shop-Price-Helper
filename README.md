@@ -25,6 +25,16 @@ next to it.
 - No network requests in this build. Opening a site button launches your normal
   browser; nothing is sent by the app.
 
+## Current limits
+
+- Mac only for now.
+- It only reads while the cursor is over a recognised game window: MapleStory,
+  CrossOver, Whisky, Wine or Parallels. A browser game stream will need a window
+  picker (roadmap).
+- Tooltip OCR is best-effort; the item name is editable. A real shop-tooltip
+  screenshot is the best way to tune the parser.
+- No automatic prices yet: manual prices plus links to the two sites.
+
 ## Install (macOS)
 
 Requires macOS 14+ and Python 3.12.
