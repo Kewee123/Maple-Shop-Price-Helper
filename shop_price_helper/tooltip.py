@@ -50,6 +50,7 @@ _STATISH = re.compile(
     r"^(?:req|class|str|dex|int|luk|hp|mp|weapon|magic|attack|def|accuracy|avoid|speed|jump|slots?|upgrades?|quantity|qty)\b",
     re.IGNORECASE,
 )
+_CODEISH = re.compile(r"(&&|\|\||[<>/\\{}\[\]_=]|\.venv|\bpython\b|\bpip\b|/tmp|\bcd\b)", re.IGNORECASE)
 
 
 def _num(value: str) -> str:
@@ -127,6 +128,8 @@ def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
         if not text or _is_noise(text) or _STATISH.match(text):
             continue
         if len(text) < 3 or len(text) > 80:
+            continue
+        if sum(ch.isalpha() for ch in text) < 3 or _CODEISH.search(text):
             continue
         quantity = 1
         suffix = _QUANTITY_SUFFIX.search(text)

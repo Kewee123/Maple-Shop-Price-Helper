@@ -35,13 +35,15 @@ def _label(parent, text="", *, size=12, color=FG, weight="normal", bg=BG, **kw):
 
 
 def _button(parent, text, command, *, kind="secondary", bg=CARD):
-    if kind == "primary":
-        colors = {"bg": ACCENT, "fg": "#1a1406", "activebackground": "#ffd875"}
-    else:
-        colors = {"bg": CARD_2, "fg": FG, "activebackground": "#2b3748"}
-    return tk.Button(parent, text=text, command=command, font=(FONT, 11, "bold"), bd=0,
-                     relief="flat", padx=10, pady=6, cursor="pointinghand", **colors,
-                     activeforeground=colors["fg"], disabledforeground=FAINT)
+    """A flat, dark button: Tk's native buttons ignore bg on macOS."""
+    button_bg, foreground, hover = ((ACCENT, "#1a1406", "#ffd875") if kind == "primary"
+                                    else (CARD_2, FG, "#2b3748"))
+    button = tk.Label(parent, text=text, font=(FONT, 11, "bold"), bg=button_bg, fg=foreground,
+                      padx=10, pady=6, cursor="pointinghand")
+    button.bind("<Button-1>", lambda _event: command())
+    button.bind("<Enter>", lambda _event: button.configure(bg=hover))
+    button.bind("<Leave>", lambda _event: button.configure(bg=button_bg))
+    return button
 
 
 def _point_in(rect, x, y) -> bool:
@@ -56,8 +58,8 @@ class ShopPriceApp:
         self.root = root
         self.root.title(f"Shop Price Helper {__version__} (prototype)")
         self.root.configure(bg=BG)
-        self.root.geometry("600x760")
-        self.root.minsize(540, 640)
+        self.root.geometry("620x840")
+        self.root.minsize(560, 720)
 
         self.item: ShopItem | None = None
         self._editing_name = False
@@ -110,13 +112,8 @@ class ShopPriceApp:
         watch_row.pack(fill="x", pady=(0, 12))
         self.watch_btn = _button(watch_row, "Start watching", self._toggle_watch, kind="primary")
         self.watch_btn.pack(side="left")
-        _button(watch_row, "Read last capture", self._read_last).pack(side="left", padx=(8, 0))
-        _button(watch_row, "Save capture", self._save_capture).pack(side="left", padx=(8, 0))
-        self.topmost_var = tk.BooleanVar(value=True)
-        tk.Checkbutton(watch_row, text="Always on top", variable=self.topmost_var,
-                       command=self._apply_topmost, bg=BG, fg=DIM, selectcolor=CARD,
-                       activebackground=BG, activeforeground=FG,
-                       font=(FONT, 10)).pack(side="right")
+        _button(watch_row, "Read last", self._read_last).pack(side="left", padx=(8, 0))
+        _button(watch_row, "Save", self._save_capture).pack(side="left", padx=(8, 0))
 
         # ---- item card
         item_card = tk.Frame(outer, bg=CARD)
@@ -139,7 +136,7 @@ class ShopPriceApp:
         _label(inner, textvariable=self.stats_var, size=11, color=DIM, bg=CARD,
                wraplength=520).pack(anchor="w")
 
-        self.raw_text = tk.Text(inner, height=4, font=("Menlo", 10), bg=CARD_2, fg=DIM,
+        self.raw_text = tk.Text(inner, height=3, width=1, font=("Menlo", 10), bg=CARD_2, fg=DIM,
                                 bd=0, relief="flat", wrap="word", padx=8, pady=6)
         self.raw_text.pack(fill="x", pady=(8, 0))
         self.raw_text.configure(state="disabled")
@@ -192,15 +189,21 @@ class ShopPriceApp:
         # ---- footer
         footer = tk.Frame(outer, bg=BG)
         footer.pack(fill="x", pady=(2, 0))
-        _label(footer, "No automatic site requests in this build. Manual prices only; "
-                       "see docs/PERMISSIONS.md.", size=9, color=FAINT, wraplength=430).pack(side="left")
+        _label(footer, "Manual prices only. See docs/PERMISSIONS.md.", size=9,
+               color=FAINT, wraplength=250).pack(side="left")
         _button(footer, "Allow screen…", self._ask_screen).pack(side="right")
+        self.topmost_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(footer, text="Always on top", variable=self.topmost_var,
+                       command=self._apply_topmost, bg=BG, fg=DIM, selectcolor=CARD,
+                       activebackground=BG, activeforeground=FG,
+                       font=(FONT, 10)).pack(side="right", padx=(0, 8))
 
     def _apply_topmost(self):
         self.root.attributes("-topmost", bool(self.topmost_var.get()))
 
     def _set_status(self, text: str):
-        self.status_var.set(text)
+        if text != self.status_var.get():
+            self.status_var.set(text)
 
     def _set_watching(self, on: bool):
         if on and not self._granted:
@@ -236,6 +239,7 @@ class ShopPriceApp:
         stable_since = 0.0
         last_frame = None
         last_processed = 0.0
+        last_note = ""
         while not self._stop.is_set():
             if not self._watching.is_set():
                 time.sleep(0.15)
@@ -250,6 +254,18 @@ class ShopPriceApp:
             if _point_in(self._own_rect, *pos):
                 time.sleep(0.15)
                 continue
+            window = capture.window_under_cursor(*pos)
+            if not capture.is_game_window(window):
+                note = "Move the cursor over the MapleStory game window."
+                if note != last_note:
+                    self._queue.put(("status", note))
+                    last_note = note
+                time.sleep(0.35)
+                continue
+            note = f"Watching {window.owner} · {window.title}".strip(" ·")
+            if note != last_note:
+                self._queue.put(("status", note))
+                last_note = note
             now = time.monotonic()
             forced = self._force_read.is_set()
             if forced:
@@ -262,7 +278,7 @@ class ShopPriceApp:
                 continue
             last_pos = pos
             try:
-                image = capture.grab(capture.region_around(*pos))
+                image = capture.grab(capture.region_around(*pos), exclude=self._own_rect)
             except Exception as exc:
                 self._queue.put(("error", f"Capture failed: {exc}"))
                 time.sleep(0.5)
@@ -390,10 +406,11 @@ class ShopPriceApp:
         suggested = summary.suggested()
         self.suggested_var.set(fmt_mesos(suggested) if suggested is not None else "—")
         notes = [q.note for q in summary.quotes if q.note]
-        notes.extend(notices)
+        if notices:
+            notes.append("Live sources need permission (docs/PERMISSIONS.md).")
         if not summary.quotes:
-            notes.append("No manual price yet. Type one with Set price…, or open a site.")
-        self.notice_var.set("  ·  ".join(dict.fromkeys(notes))[:300])
+            notes.append("No manual price yet — Set price… or open a site.")
+        self.notice_var.set("  ·  ".join(dict.fromkeys(notes))[:220])
 
     def _clear_prices(self):
         for var in self.price_vars.values():

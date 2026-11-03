@@ -9,11 +9,12 @@ from __future__ import annotations
 import ctypes
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import mss
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 DEFAULT_WIDTH = 640
 DEFAULT_HEIGHT = 560
@@ -91,12 +92,25 @@ def region_around(x: int, y: int, width: int = DEFAULT_WIDTH,
     return {"left": int(left), "top": int(top), "width": int(w), "height": int(h)}
 
 
-def grab(region: dict[str, int]) -> Image.Image:
-    """Grab one rectangle as an RGB PIL image."""
+def grab(region: dict[str, int], exclude: tuple[int, int, int, int] | None = None) -> Image.Image:
+    """Grab one rectangle as an RGB PIL image.
+
+    `exclude` is a screen rectangle (left, top, right, bottom) to black out, normally
+    this helper's own window so its text can never be mistaken for a game tooltip.
+    """
     with mss.MSS() as sct:
         shot = sct.grab(region)
         pixels = np.asarray(shot)                       # BGRA
-        return Image.fromarray(pixels[:, :, :3][:, :, ::-1])   # RGB
+        image = Image.fromarray(pixels[:, :, :3][:, :, ::-1])   # RGB
+    if exclude:
+        left, top, right, bottom = exclude
+        x0 = max(0, left - region["left"])
+        y0 = max(0, top - region["top"])
+        x1 = min(image.width, right - region["left"])
+        y1 = min(image.height, bottom - region["top"])
+        if x1 > x0 and y1 > y0:
+            ImageDraw.Draw(image).rectangle([x0, y0, x1 - 1, y1 - 1], fill=(0, 0, 0))
+    return image
 
 
 def frame_difference(a: Image.Image | None, b: Image.Image) -> float:
@@ -113,3 +127,68 @@ def save_debug(image: Image.Image, folder: Path, name: str = "last-capture.png")
     path = folder / name
     image.save(path)
     return path
+
+
+@dataclass(frozen=True)
+class WindowInfo:
+    number: int
+    pid: int
+    owner: str
+    title: str
+    left: int
+    top: int
+    width: int
+    height: int
+
+    def contains(self, x: int, y: int) -> bool:
+        return self.left <= x < self.left + self.width and self.top <= y < self.top + self.height
+
+
+def on_screen_windows() -> list[WindowInfo]:
+    """Normal windows on screen, front to back. The app's own windows are left out."""
+    if sys.platform != "darwin":
+        return []
+    try:
+        import os
+        import Quartz
+        options = Quartz.kCGWindowListOptionOnScreenOnly | getattr(
+            Quartz, "kCGWindowListExcludeDesktopElements", 0)
+        raw = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
+        found = []
+        for window in raw or []:
+            if window.get("kCGWindowLayer") != 0:
+                continue
+            if window.get("kCGWindowOwnerPID") == os.getpid():
+                continue
+            bounds = window.get("kCGWindowBounds") or {}
+            if not all(k in bounds for k in ("X", "Y", "Width", "Height")):
+                continue
+            found.append(WindowInfo(
+                number=int(window.get("kCGWindowNumber") or 0),
+                pid=int(window.get("kCGWindowOwnerPID") or 0),
+                owner=str(window.get("kCGWindowOwnerName") or ""),
+                title=str(window.get("kCGWindowName") or ""),
+                left=int(bounds["X"]), top=int(bounds["Y"]),
+                width=int(bounds["Width"]), height=int(bounds["Height"]),
+            ))
+        return found
+    except Exception:
+        return []
+
+
+def window_under_cursor(x: int, y: int) -> WindowInfo | None:
+    """The frontmost normal window at the cursor."""
+    return next((window for window in on_screen_windows() if window.contains(x, y)), None)
+
+
+def is_game_window(window: WindowInfo | None) -> bool:
+    """MapleStory itself, or the wrapper a Mac player commonly runs it in."""
+    if window is None:
+        return False
+    text = f"{window.owner} {window.title}".lower()
+    if "maplestory" in text:
+        return True
+    return window.owner.lower() in {
+        "crossover", "whisky", "wine", "wine64", "wine-preloader",
+        "parallels desktop", "parallels",
+    }

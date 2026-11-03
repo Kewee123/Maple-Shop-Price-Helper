@@ -73,6 +73,13 @@ class TooltipParseTests(unittest.TestCase):
         self.assertIsNone(parse([]))
         self.assertIsNone(parse(stack("You can't get anymore items.")))
 
+    def test_code_or_terminal_text_is_not_an_item(self):
+        self.assertIsNone(parse(stack(
+            "hop-Price-Helper && . venv/bin/python -m shop_price_helper",
+            ">/tmp/shopui.log",
+            "cd /Users/kewee",
+        )))
+
     def test_ocr_letter_numbers_are_fixed(self):
         item = parse(stack("Blue Dragon Helmet", "Req Lev: 3O", "Slots: 7"))
         self.assertEqual(item.stats["Req Lev"], "30")
