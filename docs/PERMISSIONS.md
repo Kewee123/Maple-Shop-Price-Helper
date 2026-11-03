@@ -1,100 +1,53 @@
-# Price-source permissions
+# Price sources
 
-The screen-reading side is fine: it only reads the user's own screen. The price
-data is different. Both sites protect their item data, so the app does not fetch
-from them until one of them says yes in writing.
+The app does **not** fetch price data from either site. It only opens a normal
+browser link when the user clicks a button.
 
-## What the sites currently say
+## MesoWatch
 
-### meso.watch
+- **No public API.**
+- **Does not share its data.**
+- **Do not copy it.** Do not scrape, crawl, download, mirror, store its table or
+  build a dataset from it. MesoWatch's terms explicitly forbid automated
+  collection and building an app/product from its data.
+- This app does not ask for access and does not implement a MesoWatch provider.
+- Clicking **Open MesoWatch** only opens:
 
-From <https://meso.watch/terms.html> (updated 2026-10-14):
+  `https://meso.watch/?q=<item name>`
 
-- No script, crawler or AI system may collect the price table or the data files.
-- No direct requests to the site's data files.
-- No republishing, resale, mirroring or building an app/product from the data
-  without written permission.
-- A person may browse the site and quote a small number of prices with a visible
-  credit and link.
+  in the user's browser. The app never reads the page or saves its contents.
+- Manual prices in the app are the user's own notes. They are not a copy of
+  MesoWatch's data and stay on the user's computer.
 
-So: **no scraping, no automatic reads**. Contact: `contact@meso.watch`.
+## Cozy Market
 
-### cozy.markets
+- The public overview endpoints work, but item search/detail/sightings require a
+  browser pass (Cloudflare Turnstile): `401 {"error":"pass needed: open the site
+  in a browser"}`.
+- The app does not bypass that gate and does not fetch item data.
+- Clicking **Open Cozy** only opens:
 
-The public `api/overview`, `api/board`, `api/streams` and `api/scan-map` endpoints
-work, but item search/detail/sightings return:
+  `https://cozy.markets/items?q=<item name>`
 
-```json
-{"error":"pass needed: open the site in a browser"}
-```
+  in the user's browser.
+- If Cozy Market ever publishes an official third-party API, it can be added
+  behind the `PriceProvider` interface after reading its terms.
 
-The site obtains a short-lived `cozy-pass` through Cloudflare Turnstile. That is
-a deliberate bot gate; the prototype does not bypass it. The site links a
-Discord and Patreon from its pages; ask there for an approved desktop API or
-partner access.
+## What the app does instead
 
-## Draft message — meso.watch
+1. **Manual price notes** — the user types what they found (or their own sale
+   data) into **Set price…**. Stored only in:
 
-**To:** contact@meso.watch  
-**Subject:** Read-only price lookup for a free MapleStory Classic shop helper
+   `~/Library/Application Support/MapleShopPriceHelper/prices.json`
 
-> Hi MesoWatch team,
->
-> I'm building a free, open-source Mac/Windows companion for MapleStory Classic
-> shop owners. It reads the item tooltip on the user's own screen (no clicks or
-> key input into the game) and shows a suggested listing price.
->
-> I would like to query MesoWatch's sold-price data for the one item the user is
-> hovering, read-only. The design is deliberately small:
->
-> - one item lookup at a time, initiated by the user hovering an item — no bulk
->   crawling or table copying;
-> - a short cache and a rate limit, with a clear User-Agent and contact address;
-> - attribution and a link back to meso.watch wherever a price is shown;
-> - no republishing, resale, mirroring, AI training or redistribution;
-> - no requests to your data files, and no attempt to get around rate limits or
->   bot checks.
->
-> If you would rather provide an official API/export or a partner key, that works
-> too. Could you tell me whether this is possible and what terms/attribution you
-> would require? I can send the prototype and change it to whatever you are
-> comfortable with.
->
-> Thanks,
-> [name]
+2. **Browser links** — the user checks the live site themselves.
 
-## Draft message — cozy.markets
+3. **Future, only with permission** — an authorized API or a CSV of the user's
+   own notes. No site datasets.
 
-**To:** the Cozy Market Discord / contact listed on the site  
-**Subject:** Approved desktop API access for a free shop price helper
+## Do not
 
-> Hi Cozy Market team,
->
-> I'm building a free, open-source Mac/Windows companion for MapleStory Classic
-> shop owners. It reads the item tooltip on the user's own screen and shows a
-> suggested listing price.
->
-> I saw that the item endpoints need a `cozy-pass` from the site and I do not want
-> to bypass that gate or pretend to be a browser. Is there an approved way for a
-> desktop app to do read-only item lookups — a partner API/key, a documented
-> endpoint, or a periodic export?
->
-> The app would do one lookup at a time for the item the user is hovering, cache
-> briefly, rate-limit, send a clear User-Agent/contact, show attribution and a
-> link back, and never republish or redistribute the data. No bulk copying and no
-> AI training.
->
-> If that is not available, I'll keep the app on manual prices and links only.
-> Could you point me to the right person/terms?
->
-> Thanks,
-> [name]
-
-## Interim behaviour (this repo)
-
-- `ManualPriceProvider` stores prices the user types, on their computer.
-- `MesoWatchProvider` and `CozyMarketProvider` are deliberately disabled; they
-  raise `SourceUnavailable` with the reason.
-- The UI only opens normal browser search URLs; it never fetches them.
-- If permission is granted later, implement the two providers behind the same
-  interface, with a small cache and rate limit.
+- Do not add a scraper, headless browser, Turnstile bypass, or proxy for either
+  site.
+- Do not add bundled/exported MesoWatch price tables.
+- Do not ship a provider that silently reads a site.

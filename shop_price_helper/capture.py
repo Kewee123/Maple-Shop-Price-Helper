@@ -16,8 +16,8 @@ import mss
 import numpy as np
 from PIL import Image, ImageDraw
 
-DEFAULT_WIDTH = 640
-DEFAULT_HEIGHT = 560
+DEFAULT_WIDTH = 760
+DEFAULT_HEIGHT = 600
 
 
 def _cg() -> ctypes.CDLL:

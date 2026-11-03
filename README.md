@@ -5,8 +5,9 @@ shop; the helper reads the tooltip on your own screen and shows a price panel
 next to it.
 
 > **Status: prototype.** It reads shop tooltips and keeps manual prices. It does
-> **not** automatically fetch from meso.watch or cozy.markets yet: both protect
-> their item data, so that part waits for written permission or an official API.
+> **not** fetch from meso.watch or cozy.markets: **MesoWatch has no public API and
+> does not share its data — do not copy it.** Cozy Market's item endpoints need a
+> browser pass. The app is manual prices plus browser links only.
 > See [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
 ## What works
@@ -19,8 +20,10 @@ next to it.
 - Manual price entries per item (and per stat variant for equipment), saved on
   this computer only.
 - Suggested list price = median × 0.95, plus the raw median, last sold, volume,
-  low/high and sources.
-- Buttons to open the matching search on **meso.watch** and **cozy.markets**.
+  low/high and sources. The quantity is editable, so a stack shows the total for
+  the whole stack (e.g. 189 Aquamarine Ore).
+- Browser buttons for **meso.watch** and **cozy.markets** (links only; no page
+  reading, no data copying).
 - “Save capture” for tuning the tooltip detection.
 - No network requests in this build. Opening a site button launches your normal
   browser; nothing is sent by the app.
@@ -33,7 +36,8 @@ next to it.
   picker (roadmap).
 - Tooltip OCR is best-effort; the item name is editable. A real shop-tooltip
   screenshot is the best way to tune the parser.
-- No automatic prices yet: manual prices plus links to the two sites.
+- No automatic price API: MesoWatch is link-only by policy; manual prices plus
+  browser links are the supported path.
 
 ## Install (macOS)
 
@@ -58,9 +62,11 @@ helper.
 2. Open the helper and press **Start watching** if it isn’t already watching.
 3. Hover an item in the shop for about half a second.
 4. The panel fills with the OCR’d item. Correct the name if needed.
-5. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
-   work), or click **MesoWatch** / **Cozy Market** to look it up.
-6. **Copy suggested** puts the suggested listing price on the clipboard.
+5. Set the **Quantity** from the inventory slot if it isn’t in the tooltip.
+6. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
+   work), or click **Open MesoWatch** / **Open Cozy** to look it up yourself.
+7. **Copy suggested** puts the unit price — or the total for the stack — on the
+   clipboard.
 
 The helper never clicks or types into the game. It only reads the small screen
 area around the cursor.
@@ -70,7 +76,8 @@ area around the cursor.
 - Manual prices: `~/Library/Application Support/MapleShopPriceHelper/prices.json`
 - Saved captures: `~/Library/Application Support/MapleShopPriceHelper/captures/`
 
-Nothing is uploaded. The two site buttons only open a browser URL.
+Nothing is uploaded. The two site buttons only open a browser URL; the app never
+reads the page or stores its contents.
 
 ## Tests
 
@@ -98,11 +105,12 @@ caching and Windows path.
 
 ## Roadmap
 
-- [ ] Get written permission / API access from meso.watch and cozy.markets.
-- [ ] Add `MesoWatchProvider` and `CozyMarketProvider` behind the existing
-      interface, with caching, rate limits and attribution.
+- [ ] If an authorized price API is published, add it behind `PriceProvider`
+      (with caching/rate limits). Until then: manual prices and links only.
+- [ ] Editable quantity and total-for-stack on the main panel.
 - [ ] Tune tooltip-box detection against real shop screenshots (send one with
       the overlay out of the way).
+- [ ] Import/export the user's own price notes (CSV), not site datasets.
 - [ ] Match equipment stat variants more exactly; show “clean vs scrolled”.
 - [ ] Windows build (Win32 capture + the same OCR/provider layers).
 - [ ] A small PyInstaller app and GitHub release workflow.
@@ -110,7 +118,8 @@ caching and Windows path.
 ## Legal
 
 This is a fan-made tool, not affiliated with NEXON. MapleStory and its item
-names belong to NEXON. Price data belongs to the site that collected it; this
-prototype does not copy or redistribute either site's data.
+names belong to NEXON. MesoWatch has no API and does not share its data; this
+project does not copy, scrape or redistribute it. Cozy Market is linked to, never
+read by the app. Manual price notes are the user's own and stay on their Mac.
 
 MIT licensed; see [LICENSE](LICENSE).

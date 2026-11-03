@@ -13,8 +13,7 @@ from tkinter import messagebox
 
 from . import __version__, capture, ocr, tooltip
 from .model import PriceQuote, ShopItem, fmt_mesos, fmt_volume, parse_count, parse_mesos
-from .pricing import (CozyMarketProvider, ManualPriceProvider, ManualStore, MesoWatchProvider,
-                      PriceService, app_data_dir)
+from .pricing import ManualPriceProvider, ManualStore, PriceService, app_data_dir, site_links
 
 BG = "#11151c"
 CARD = "#19212d"
@@ -65,17 +64,14 @@ class ShopPriceApp:
         self._editing_name = False
         self._last_image = None
         self._own_rect = None
+        self._suggested_unit = self._suggested_total = None
         self._watching = threading.Event()
         self._force_read = threading.Event()
         self._stop = threading.Event()
         self._queue: queue.Queue = queue.Queue()
 
         self.manual_store = ManualStore()
-        self.service = PriceService([
-            ManualPriceProvider(self.manual_store),
-            CozyMarketProvider(),
-            MesoWatchProvider(),
-        ])
+        self.service = PriceService([ManualPriceProvider(self.manual_store)])
 
         self._build()
         self._apply_topmost()
@@ -136,6 +132,18 @@ class ShopPriceApp:
         _label(inner, textvariable=self.stats_var, size=11, color=DIM, bg=CARD,
                wraplength=520).pack(anchor="w")
 
+        qty_row = tk.Frame(inner, bg=CARD)
+        qty_row.pack(fill="x", pady=(6, 0))
+        _label(qty_row, "Quantity", size=10, color=FAINT, bg=CARD).pack(side="left")
+        self.qty_var = tk.StringVar(value="1")
+        self.qty_entry = tk.Entry(qty_row, textvariable=self.qty_var, width=8,
+                                  font=(FONT, 12), bg=CARD_2, fg=FG, insertbackground=FG,
+                                  relief="flat", highlightthickness=1, highlightbackground=CARD_2,
+                                  highlightcolor=ACCENT)
+        self.qty_entry.pack(side="left", padx=(8, 0))
+        self.qty_entry.bind("<Return>", lambda _e: self._quantity_changed())
+        self.qty_entry.bind("<FocusOut>", lambda _e: self._quantity_changed())
+
         self.raw_text = tk.Text(inner, height=3, width=1, font=("Menlo", 10), bg=CARD_2, fg=DIM,
                                 bd=0, relief="flat", wrap="word", padx=8, pady=6)
         self.raw_text.pack(fill="x", pady=(8, 0))
@@ -154,6 +162,8 @@ class ShopPriceApp:
         _label(suggested_row, "Suggested list", size=12, color=DIM, bg=CARD).pack(side="left")
         _label(suggested_row, textvariable=self.suggested_var, size=24, color=ACCENT,
                weight="bold", bg=CARD).pack(side="right")
+        self.total_var = tk.StringVar(value="")
+        _label(pinner, textvariable=self.total_var, size=10, color=FAINT, bg=CARD).pack(anchor="e")
 
         grid = tk.Frame(pinner, bg=CARD)
         grid.pack(fill="x")
@@ -181,16 +191,16 @@ class ShopPriceApp:
         actions.pack(fill="x", pady=(4, 0))
         _button(actions, "Set price…", self._edit_manual, kind="primary", bg=CARD).pack(side="left")
         _button(actions, "Copy suggested", self._copy_suggested, bg=CARD).pack(side="left", padx=(6, 0))
-        self.meso_btn = _button(actions, "MesoWatch", lambda: self._open_source("meso"), bg=CARD)
+        self.meso_btn = _button(actions, "Open MesoWatch", lambda: self._open_source("MesoWatch"), bg=CARD)
         self.meso_btn.pack(side="right")
-        self.cozy_btn = _button(actions, "Cozy Market", lambda: self._open_source("cozy"), bg=CARD)
+        self.cozy_btn = _button(actions, "Open Cozy", lambda: self._open_source("Cozy Market"), bg=CARD)
         self.cozy_btn.pack(side="right", padx=(0, 6))
 
         # ---- footer
         footer = tk.Frame(outer, bg=BG)
         footer.pack(fill="x", pady=(2, 0))
-        _label(footer, "Manual prices only. See docs/PERMISSIONS.md.", size=9,
-               color=FAINT, wraplength=250).pack(side="left")
+        _label(footer, "Manual prices only. MesoWatch is link-only; no site data is copied.",
+               size=9, color=FAINT, wraplength=250).pack(side="left")
         _button(footer, "Allow screen…", self._ask_screen).pack(side="right")
         self.topmost_var = tk.BooleanVar(value=True)
         tk.Checkbutton(footer, text="Always on top", variable=self.topmost_var,
@@ -334,10 +344,8 @@ class ShopPriceApp:
             self.stats_var.set("Hover an item in the shop.")
             self._raw_lines([])
             return
-        bits = []
-        if self.item.quantity > 1:
-            bits.append(f"Quantity: {self.item.quantity}")
-        bits.extend(f"{key}: {value}" for key, value in self.item.display_stats)
+        self.qty_var.set(str(self.item.quantity or 1))
+        bits = [f"{key}: {value}" for key, value in self.item.display_stats]
         self.stats_var.set("   ".join(bits) if bits else f"{self.item.category or 'item'} · no stats read")
         self._raw_lines(self.item.lines)
 
@@ -358,6 +366,17 @@ class ShopPriceApp:
         self.item = self.item.renamed(name) if self.item else ShopItem(name=name)
         self._show_item()
         self._lookup()
+
+    def _quantity_changed(self):
+        text = self.qty_var.get().replace(",", "").strip()
+        try:
+            quantity = max(1, int(text))
+        except ValueError:
+            quantity = 1
+        self.qty_var.set(str(quantity))
+        if self.item:
+            self.item.quantity = quantity
+            self._lookup()
 
     def _read_last(self):
         if self._last_image is None:
@@ -404,10 +423,15 @@ class ShopPriceApp:
             if summary.low is not None or summary.high is not None else "—")
         self.price_vars["sources"].set(", ".join(summary.sources) or "none")
         suggested = summary.suggested()
+        quantity = max(1, self.item.quantity)
+        self._suggested_unit = suggested
+        self._suggested_total = suggested * quantity if suggested is not None else None
         self.suggested_var.set(fmt_mesos(suggested) if suggested is not None else "—")
+        self.total_var.set(f"Total for {quantity}: {fmt_mesos(self._suggested_total)} mesos"
+                           if self._suggested_total is not None and quantity > 1 else "")
         notes = [q.note for q in summary.quotes if q.note]
         if notices:
-            notes.append("Live sources need permission (docs/PERMISSIONS.md).")
+            notes.append("No automatic price source is connected.")
         if not summary.quotes:
             notes.append("No manual price yet — Set price… or open a site.")
         self.notice_var.set("  ·  ".join(dict.fromkeys(notes))[:220])
@@ -416,26 +440,28 @@ class ShopPriceApp:
         for var in self.price_vars.values():
             var.set("—")
         self.suggested_var.set("—")
+        self.total_var.set("")
+        self._suggested_unit = self._suggested_total = None
         self.notice_var.set("")
 
     def _open_source(self, which: str):
         if not self.item:
             self._set_status("Hover or type an item name first.")
             return
-        for name, url in self.service.links(self.item):
-            if which == "meso" and name == "MesoWatch":
-                webbrowser.open(url)
-                return
-            if which == "cozy" and name == "Cozy Market":
+        for name, url in site_links(self.item):
+            if name == which:
                 webbrowser.open(url)
                 return
 
     def _copy_suggested(self):
-        text = self.suggested_var.get()
-        if text and text != "—":
-            self.root.clipboard_clear()
-            self.root.clipboard_append(text)
-            self._set_status(f"Copied {text} mesos.")
+        quantity = max(1, self.item.quantity) if self.item else 1
+        value = self._suggested_total if quantity > 1 else self._suggested_unit
+        if value is None:
+            return
+        text = f"{value:,}"
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._set_status(f"Copied {text} mesos" + (f" for {quantity}." if quantity > 1 else "."))
 
     def _edit_manual(self):
         if not self.item:
@@ -450,11 +476,13 @@ class ShopPriceApp:
         body.pack(fill="both", expand=True, padx=18, pady=14)
         _label(body, self.item.name, size=16, weight="bold").pack(anchor="w")
         if self.item.variant:
-            _label(body, self.item.variant, size=9, color=FAINT, wraplength=430).pack(anchor="w", pady=(0, 8))
+            _label(body, self.item.variant, size=9, color=FAINT, wraplength=430).pack(anchor="w", pady=(0, 4))
+        _label(body, "For your own pricing notes. Values are per unit.", size=9,
+               color=FAINT).pack(anchor="w", pady=(0, 8))
 
         current = self.manual_store.quote(self.item)
         fields = [
-            ("typical", "Typical / median sold (e.g. 1.2m)"),
+            ("typical", "Typical / median sold per unit (e.g. 1.2m)"),
             ("last", "Last sold"),
             ("volume", "24h sales / volume (a count)"),
             ("low", "Low"),

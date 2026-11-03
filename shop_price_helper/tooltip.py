@@ -52,6 +52,13 @@ _STATISH = re.compile(
 )
 _CODEISH = re.compile(r"(&&|\|\||[<>/\\{}\[\]_=]|\.venv|\bpython\b|\bpip\b|/tmp|\bcd\b)", re.IGNORECASE)
 
+_UI_WORDS = {
+    "item inventory", "equip", "use", "set up", "etc", "cash", "deco",
+    "mesos", "items", "shop", "inventory", "free market", "meso",
+}
+
+_DESCRIPTION_STARTS = {"the", "a", "an", "this", "it", "you", "your", "when", "while", "can"}
+
 
 def _num(value: str) -> str:
     """Fix the usual OCR letter/number mix-up in a numeric field."""
@@ -109,8 +116,28 @@ def _blocks(lines: list[TextLine]) -> list[list[TextLine]]:
     return blocks
 
 
+def _name_likeness(text: str) -> float:
+    """Item names are short and title-cased; descriptions start with 'The'/'A'."""
+    clean = text.strip()
+    low = clean.lower()
+    if low in _UI_WORDS:
+        return -10.0
+    if clean.isupper() and len(clean) > 3:
+        return -6.0
+    words = clean.split()
+    if not words:
+        return -10.0
+    if len(words) > 7:
+        return -6.0
+    if words[0].lower() in _DESCRIPTION_STARTS:
+        return -5.0
+    title = sum(word[:1].isupper() for word in words) / len(words)
+    return title * 6.0 - max(0, len(words) - 5) * 1.5
+
+
 def _score(block: list[TextLine]) -> float:
-    """Prefer a multi-line block with stats, near the middle of the capture."""
+    """Prefer a multi-line block with stats, near the middle of the capture, whose
+    first line looks like an item name rather than a tooltip description."""
     if not block:
         return -1.0
     stat_lines = sum(1 for line in block if _stats_of(line.text))
@@ -118,7 +145,10 @@ def _score(block: list[TextLine]) -> float:
     cx = sum(line.center_x for line in block) / len(block)
     cy = sum(line.center_y for line in block) / len(block)
     distance = abs(cx - 0.5) + abs(cy - 0.5)
-    return len(block) * 1.0 + stat_lines * 3.0 + confidence * 2.0 - distance * 1.5
+    found = _item_name(block)
+    name_bonus = _name_likeness(found[0]) if found else -10.0
+    return (len(block) * 1.0 + stat_lines * 3.0 + confidence * 2.0
+            - distance * 1.5 + name_bonus * 2.0)
 
 
 def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
@@ -128,6 +158,8 @@ def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
         if not text or _is_noise(text) or _STATISH.match(text):
             continue
         if len(text) < 3 or len(text) > 80:
+            continue
+        if text.lower() in _UI_WORDS:
             continue
         if sum(ch.isalpha() for ch in text) < 3 or _CODEISH.search(text):
             continue

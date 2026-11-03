@@ -3,8 +3,7 @@ import unittest
 from pathlib import Path
 
 from shop_price_helper.model import PriceQuote, PriceSummary, ShopItem, parse_mesos
-from shop_price_helper.pricing import (CozyMarketProvider, ManualPriceProvider, ManualStore,
-                                       MesoWatchProvider, PriceService)
+from shop_price_helper.pricing import ManualPriceProvider, ManualStore, PriceService, site_links
 
 
 class MesosParsingTests(unittest.TestCase):
@@ -71,20 +70,20 @@ class ManualStoreTests(unittest.TestCase):
 
     def test_provider_and_service(self):
         provider = ManualPriceProvider(self.store)
-        service = PriceService([provider, MesoWatchProvider(), CozyMarketProvider()])
+        service = PriceService([provider])
         summary, notices = service.lookup(self.item)
         self.assertEqual(summary.quotes, [])
-        self.assertTrue(any("MesoWatch" in note for note in notices))
-        self.assertTrue(any("Cozy Market" in note for note in notices))
+        self.assertEqual(notices, [])
         self.store.put(self.item, typical=1_000_000, last=950_000, volume=2, low=900_000, high=1_100_000)
         summary, _ = service.lookup(self.item)
         self.assertEqual(summary.typical, 1_000_000)
         self.assertEqual(summary.sources, ["manual"])
 
-    def test_links_encode_names(self):
+    def test_site_links_encode_names(self):
         item = ShopItem(name="Blue Dragon Helmet")
-        self.assertIn("Blue+Dragon+Helmet", MesoWatchProvider().url_for(item))
-        self.assertIn("Blue+Dragon+Helmet", CozyMarketProvider().url_for(item))
+        links = dict(site_links(item))
+        self.assertIn("Blue+Dragon+Helmet", links["MesoWatch"])
+        self.assertIn("Blue+Dragon+Helmet", links["Cozy Market"])
 
 
 if __name__ == "__main__":

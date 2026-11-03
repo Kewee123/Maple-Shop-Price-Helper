@@ -64,6 +64,19 @@ class TooltipParseTests(unittest.TestCase):
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Party Hat")
 
+    def test_name_wins_over_a_nearer_description(self):
+        # The description is lower on screen and closer to the capture centre; the
+        # item name must still win.
+        name = line("Aquamarine Ore", 0.78, width=0.30)
+        description = line("The ore of a blue crystal.", 0.45, width=0.55)
+        item = parse([name, description])
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Aquamarine Ore")
+
+    def test_inventory_labels_are_not_item_names(self):
+        item = parse(stack("ITEM INVENTORY", "Equip", "Use", "Set Up", "Etc", "Cash", "Deco"))
+        self.assertIsNone(item)
+
     def test_stats_variant_changes_key(self):
         clean = parse(stack("Blue Dragon Helmet", "Req Lev: 30", "STR +0", "Slots: 7"))
         scrolled = parse(stack("Blue Dragon Helmet", "Req Lev: 30", "STR +5", "Slots: 7"))

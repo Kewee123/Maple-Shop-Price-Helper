@@ -13,8 +13,8 @@ cursor ──► capture around cursor ──► macOS Vision OCR
                                       │
                     ┌─────────────────┴─────────────────┐
                     ▼                                   ▼
-             manual price store                 price providers
-                    │                                   │
+             manual price store              authorized providers only
+                    │                         (none for MesoWatch)
                     └─────────────────┬─────────────────┘
                                       ▼
                               PriceSummary → window
@@ -74,8 +74,13 @@ class PriceProvider:
 ```
 
 - `ManualPriceProvider` reads `prices.json` in the app data folder.
-- `MesoWatchProvider` and `CozyMarketProvider` are disabled placeholders until
-  permission/API access exists. They provide the browser search URL.
+- `site_links()` returns the browser URLs for MesoWatch and Cozy Market. There is
+  **no MesoWatch provider**: it has no public API and does not share its data, so
+  the app must not copy it. Cozy item endpoints need a browser pass, so there is
+  no automated Cozy provider either.
+- If an authorized third-party API is published later, implement `PriceProvider`
+  behind `PriceService`. Until then, the only data source is the user's own
+  manual notes.
 - `PriceService` combines quotes into a `PriceSummary`: median typical, last,
   summed volume, low/high and suggested list price.
 
@@ -115,6 +120,8 @@ Keep the parser/provider/window layers unchanged and add:
 ## Things not to do
 
 - Do not bypass cozy.markets' Turnstile pass or meso.watch's rate/bot controls.
-- Do not download/store their price tables or data files.
-- Do not ship a provider that is disabled by default without a clear UI notice.
+- Do not scrape, download, store or rebuild MesoWatch's price table. It has no
+  API and does not share its data.
+- Do not read either site's pages from the app; only open a browser link.
+- Do not ship a provider that silently reads a site.
 - Do not add network calls to the existing overlay; this is a separate app.

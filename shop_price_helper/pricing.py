@@ -50,28 +50,16 @@ class PriceProvider(ABC):
         return ""
 
 
-class MesoWatchProvider(PriceProvider):
-    name = "MesoWatch"
-    permission_note = ("MesoWatch's terms don't allow automated collection. "
-                       "Ask contact@meso.watch for a read-only API/permission.")
-
-    def lookup(self, item: ShopItem) -> list[PriceQuote]:
-        raise SourceUnavailable(self.permission_note)
-
-    def url_for(self, item: ShopItem) -> str:
-        return "https://meso.watch/?q=" + quote_plus(item.name)
+SITE_LINKS = {
+    # Browser links only. The app never fetches these pages or copies their data.
+    "MesoWatch": "https://meso.watch/?q={query}",
+    "Cozy Market": "https://cozy.markets/items?q={query}",
+}
 
 
-class CozyMarketProvider(PriceProvider):
-    name = "Cozy Market"
-    permission_note = ("Cozy Market's item API needs a browser pass (Cloudflare Turnstile). "
-                       "Ask them for an approved desktop API/partner access.")
-
-    def lookup(self, item: ShopItem) -> list[PriceQuote]:
-        raise SourceUnavailable(self.permission_note)
-
-    def url_for(self, item: ShopItem) -> str:
-        return "https://cozy.markets/items?q=" + quote_plus(item.name)
+def site_links(item: ShopItem) -> list[tuple[str, str]]:
+    """Where the user can look the item up themselves, in a normal browser."""
+    return [(name, template.format(query=quote_plus(item.name))) for name, template in SITE_LINKS.items()]
 
 
 class ManualStore:
@@ -170,10 +158,3 @@ class PriceService:
                 notices.append(f"{provider.name}: {type(exc).__name__}: {exc}")
         return PriceSummary.from_quotes(quotes), notices
 
-    def links(self, item: ShopItem) -> list[tuple[str, str]]:
-        found = []
-        for provider in self.providers:
-            url = provider.url_for(item)
-            if url:
-                found.append((provider.name, url))
-        return found
