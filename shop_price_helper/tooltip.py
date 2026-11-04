@@ -52,6 +52,7 @@ _STATISH = re.compile(
     re.IGNORECASE,
 )
 _CODEISH = re.compile(r"(&&|\|\||[<>/\\{}\[\]_=]|\.venv|\bpython\b|\bpip\b|/tmp|\bcd\b)", re.IGNORECASE)
+_QUEST_PROGRESS = re.compile(r"\b\d+\s*/\s*\d+\b")
 
 # Inventory tabs and headings. OCR often reads "Etc" as "Ete", so short words
 # are also matched approximately.
@@ -207,6 +208,24 @@ def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
     return None
 
 
+def _tooltip_like(block: list[TextLine], found: tuple[str, int]) -> bool:
+    """Whether the block looks like an item tooltip, not a lone HUD/player name.
+
+    Every item tooltip in Classic has at least a second line (description, stats
+    or price). A single "Kewee" over the character is a player name, not an item.
+    Single-line stack entries with an "x 250" suffix are still accepted.
+    """
+    _, quantity = found
+    if quantity > 1 or any(_stats_of(line.text) for line in block):
+        return True
+    texts = [_clean_text(line.text) for line in block if _clean_text(line.text)]
+    if len(texts) < 2:
+        return False
+    if any(_QUEST_PROGRESS.search(text) for text in texts):
+        return False
+    return True
+
+
 def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -> ShopItem | None:
     """Best item in the OCR lines, or None when nothing looks like an item.
 
@@ -222,6 +241,8 @@ def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -
     block = max(blocks, key=lambda found: _score(found, focus))
     found = _item_name(block)
     if not found:
+        return None
+    if not _tooltip_like(block, found):
         return None
     name, quantity = found
 

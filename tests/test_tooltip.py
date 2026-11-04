@@ -64,11 +64,10 @@ class TooltipParseTests(unittest.TestCase):
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Party Hat")
 
-    def test_name_wins_over_a_nearer_description(self):
-        # The description is lower on screen and closer to the capture centre; the
-        # item name must still win.
+    def test_name_wins_over_a_longer_description(self):
+        # The description is lower and wider; the item name must still win.
         name = line("Aquamarine Ore", 0.78, width=0.30)
-        description = line("The ore of a blue crystal.", 0.45, width=0.55)
+        description = line("The ore of a blue crystal.", 0.73, width=0.55)
         item = parse([name, description])
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Aquamarine Ore")
@@ -104,6 +103,17 @@ class TooltipParseTests(unittest.TestCase):
         item = parse(lines)
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Diamond Ore")
+
+    def test_player_name_alone_is_not_an_item(self):
+        # Hovering the character name tag must not replace the item panel.
+        self.assertIsNone(parse(stack("Kewee")))
+
+    def test_quest_rows_are_not_items(self):
+        item = parse([
+            line("Arwen and the Glass Shoe", 0.80),
+            line("0/1 Arwen's Glass Shoe", 0.75),
+        ])
+        self.assertIsNone(item)
 
     def test_tab_words_are_not_an_item(self):
         for text in ("Ete", "Equip| Use SetUp", "Set Up", "ITEM INVENTORY"):

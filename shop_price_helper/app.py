@@ -142,6 +142,8 @@ class ShopPriceApp:
                                   relief="flat", highlightthickness=1, highlightbackground=CARD_2,
                                   highlightcolor=ACCENT)
         self.qty_entry.pack(side="left", padx=(8, 0))
+        _label(qty_row, "type the stack size", size=9, color=FAINT, bg=CARD).pack(
+            side="left", padx=(8, 0))
         self.qty_entry.bind("<Return>", lambda _e: self._quantity_changed())
         self.qty_entry.bind("<FocusOut>", lambda _e: self._quantity_changed())
 
