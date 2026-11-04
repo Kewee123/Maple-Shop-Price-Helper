@@ -63,6 +63,7 @@ class ShopPriceApp:
         self.item: ShopItem | None = None
         self._editing_name = False
         self._last_image = None
+        self._last_focus = None
         self._own_rect = None
         self._suggested_unit = self._suggested_total = None
         self._watching = threading.Event()
@@ -97,7 +98,7 @@ class ShopPriceApp:
         outer.pack(fill="both", expand=True, padx=18, pady=16)
 
         _label(outer, "Shop Price Helper", size=22, weight="bold").pack(anchor="w")
-        _label(outer, "Hover a shop item. The OCR result is editable, because tooltips are small.",
+        _label(outer, "Hover an item in your shop or inventory. The OCR result is editable, because tooltips are small.",
                size=11, color=DIM).pack(anchor="w", pady=(0, 10))
 
         self.status_var = tk.StringVar(value="Starting…")
@@ -128,7 +129,7 @@ class ShopPriceApp:
         self.name_entry.bind("<FocusOut>", lambda _e: self._name_changed())
         self.name_entry.bind("<Return>", lambda _e: self._name_changed())
 
-        self.stats_var = tk.StringVar(value="Hover an item in the shop.")
+        self.stats_var = tk.StringVar(value="Hover an item in your shop or inventory.")
         _label(inner, textvariable=self.stats_var, size=11, color=DIM, bg=CARD,
                wraplength=520).pack(anchor="w")
 
@@ -287,8 +288,11 @@ class ShopPriceApp:
                 time.sleep(0.05)
                 continue
             last_pos = pos
+            region = capture.region_around(*pos)
+            focus = ((pos[0] - region["left"]) / region["width"],
+                     1 - (pos[1] - region["top"]) / region["height"])
             try:
-                image = capture.grab(capture.region_around(*pos), exclude=self._own_rect)
+                image = capture.grab(region, exclude=self._own_rect)
             except Exception as exc:
                 self._queue.put(("error", f"Capture failed: {exc}"))
                 time.sleep(0.5)
@@ -299,9 +303,10 @@ class ShopPriceApp:
             last_frame = image
             last_processed = now
             self._last_image = image
+            self._last_focus = focus
             try:
                 lines = ocr.recognize(image)
-                item = tooltip.parse(lines)
+                item = tooltip.parse(lines, focus)
                 self._queue.put(("ocr", item, lines, image))
             except Exception as exc:
                 self._queue.put(("error", f"OCR failed: {exc}"))
@@ -341,7 +346,7 @@ class ShopPriceApp:
 
     def _show_item(self):
         if not self.item:
-            self.stats_var.set("Hover an item in the shop.")
+            self.stats_var.set("Hover an item in your shop or inventory.")
             self._raw_lines([])
             return
         self.qty_var.set(str(self.item.quantity or 1))
@@ -384,7 +389,7 @@ class ShopPriceApp:
             return
         try:
             lines = ocr.recognize(self._last_image)
-            self._show_ocr(tooltip.parse(lines), lines)
+            self._show_ocr(tooltip.parse(lines, self._last_focus), lines)
         except Exception as exc:
             self._set_status(f"OCR failed: {exc}")
 
@@ -431,9 +436,10 @@ class ShopPriceApp:
                            if self._suggested_total is not None and quantity > 1 else "")
         notes = [q.note for q in summary.quotes if q.note]
         if notices:
-            notes.append("No automatic price source is connected.")
+            notes.extend(notices)
         if not summary.quotes:
-            notes.append("No manual price yet — Set price… or open a site.")
+            notes.append("No price yet: automatic sources are unavailable. "
+                         "Use Set price… or open a site.")
         self.notice_var.set("  ·  ".join(dict.fromkeys(notes))[:220])
 
     def _clear_prices(self):

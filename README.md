@@ -1,8 +1,8 @@
 # Maple Shop Price Helper
 
-A Mac-first companion for MapleStory Classic shop owners. Hover an item in your
-shop; the helper reads the tooltip on your own screen and shows a price panel
-next to it.
+A Mac-first companion for MapleStory Classic shop owners. Hover an item in a
+shop or in your inventory; the helper reads the tooltip on your own screen and
+shows a price panel next to it.
 
 > **Status: prototype.** It reads shop tooltips and keeps manual prices. It does
 > **not** fetch from meso.watch or cozy.markets: **MesoWatch has no public API and
@@ -13,7 +13,8 @@ next to it.
 ## What works
 
 - Reads the item tooltip near the cursor with macOS Vision OCR (no Tesseract
-  download and no screen-recording cloud service).
+  download and no screen-recording cloud service). Works for shop rows and
+  inventory slots; inventory tabs, quest text and hover bullets are ignored.
 - Keeps the item name, stats (Req Lev, STR/DEX/INT/LUK, attack/defence, slots)
   and quantity.
 - Lets you correct the OCR name; the price lookup uses the corrected name.
@@ -34,8 +35,8 @@ next to it.
 - It only reads while the cursor is over a recognised game window: MapleStory,
   CrossOver, Whisky, Wine or Parallels. A browser game stream will need a window
   picker (roadmap).
-- Tooltip OCR is best-effort; the item name is editable. A real shop-tooltip
-  screenshot is the best way to tune the parser.
+- Tooltip OCR is best-effort; the item name is editable. **Save capture** writes
+  the exact crop if a hover is misread, which makes parser tuning quick.
 - No automatic price API: MesoWatch is link-only by policy; manual prices plus
   browser links are the supported path.
 

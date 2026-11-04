@@ -77,6 +77,39 @@ class TooltipParseTests(unittest.TestCase):
         item = parse(stack("ITEM INVENTORY", "Equip", "Use", "Set Up", "Etc", "Cash", "Deco"))
         self.assertIsNone(item)
 
+    def test_hover_bullet_is_stripped_from_item_name(self):
+        item = parse([line("• Diamond Ore", 0.52, x=0.18, width=0.13),
+                      line("The ore of a transparent jewel.", 0.48, x=0.29, width=0.22)])
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Diamond Ore")
+
+    def test_inventory_tab_fragment_does_not_beat_tooltip(self):
+        # OCR output from a real inventory hover. "Ete" is a misread of "Etc";
+        # the item name is lower and slightly left of the capture centre.
+        lines = [
+            line("Quest Helper (26)", 0.97, x=0.27, width=0.12),
+            line("Arwen and the Glass Shoe", 0.93, x=0.28, width=0.19),
+            line("ITEM INVENTORY", 0.91, x=0.00, width=0.10),
+            line("Equip| Use SetUp", 0.87, x=0.00, width=0.13),
+            line("Ete", 0.87, x=0.14, width=0.02),
+            line("Cash", 0.87, x=0.18, width=0.03),
+            line("Deco", 0.87, x=0.22, width=0.03),
+            line("[Event] The Journey Begins", 0.86, x=0.28, width=0.20),
+            line("30/30 Maple Leat", 0.83, x=0.28, width=0.12),
+            line("19", 0.58, x=0.05, width=0.02),
+            line("• Diamond Ore", 0.52, x=0.18, width=0.13),
+            line("The ore of a transparent jewel.", 0.48, x=0.29, width=0.22),
+            line("36", 0.47, x=0.16, width=0.02),
+        ]
+        item = parse(lines)
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Diamond Ore")
+
+    def test_tab_words_are_not_an_item(self):
+        for text in ("Ete", "Equip| Use SetUp", "Set Up", "ITEM INVENTORY"):
+            with self.subTest(text=text):
+                self.assertIsNone(parse([line(text, 0.80)]))
+
     def test_stats_variant_changes_key(self):
         clean = parse(stack("Blue Dragon Helmet", "Req Lev: 30", "STR +0", "Slots: 7"))
         scrolled = parse(stack("Blue Dragon Helmet", "Req Lev: 30", "STR +5", "Slots: 7"))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from difflib import get_close_matches
 
 from .model import ShopItem, TextLine
 
@@ -52,12 +53,44 @@ _STATISH = re.compile(
 )
 _CODEISH = re.compile(r"(&&|\|\||[<>/\\{}\[\]_=]|\.venv|\bpython\b|\bpip\b|/tmp|\bcd\b)", re.IGNORECASE)
 
-_UI_WORDS = {
-    "item inventory", "equip", "use", "set up", "etc", "cash", "deco",
-    "mesos", "items", "shop", "inventory", "free market", "meso",
+# Inventory tabs and headings. OCR often reads "Etc" as "Ete", so short words
+# are also matched approximately.
+_UI_TOKENS = {
+    "equip", "use", "setup", "etc", "cash", "deco", "mesos", "meso", "items",
+    "shop", "inventory", "quest", "helper",
 }
+_UI_PHRASES = {"iteminventory", "inventory", "freemarket", "questhelper"}
+_UI_PREFIXES = ("iteminventory", "questhelper")
 
 _DESCRIPTION_STARTS = {"the", "a", "an", "this", "it", "you", "your", "when", "while", "can"}
+
+# The hover highlight puts a bullet (or similar glyph) in front of the item name.
+_LEADING_MARKS = re.compile(r"^[\s•·●○◆◇■□▪▫►▶➤➢»*\-–—]+")
+
+
+def _clean_text(text: str) -> str:
+    """Drop hover bullets and extra whitespace, but keep the words."""
+    return _LEADING_MARKS.sub("", " ".join(str(text).split())).strip(" .:-")
+
+
+def _ui_like(text: str) -> bool:
+    """Whether a line is inventory chrome rather than the item name."""
+    clean = _clean_text(text).lower()
+    if not clean:
+        return False
+    normalized = re.sub(r"[^a-z0-9]+", "", clean)
+    if normalized in _UI_TOKENS or normalized in _UI_PHRASES or normalized.startswith(_UI_PREFIXES):
+        return True
+    words = [word for word in re.split(r"[^a-z]+", clean) if word]
+    if not words:
+        return False
+    for word in words:
+        if word in _UI_TOKENS:
+            continue
+        if len(word) <= 4 and get_close_matches(word, _UI_TOKENS, n=1, cutoff=0.6):
+            continue
+        return False
+    return True
 
 
 def _num(value: str) -> str:
@@ -118,9 +151,9 @@ def _blocks(lines: list[TextLine]) -> list[list[TextLine]]:
 
 def _name_likeness(text: str) -> float:
     """Item names are short and title-cased; descriptions start with 'The'/'A'."""
-    clean = text.strip()
+    clean = _clean_text(text)
     low = clean.lower()
-    if low in _UI_WORDS:
+    if _ui_like(clean):
         return -10.0
     if clean.isupper() and len(clean) > 3:
         return -6.0
@@ -135,31 +168,32 @@ def _name_likeness(text: str) -> float:
     return title * 6.0 - max(0, len(words) - 5) * 1.5
 
 
-def _score(block: list[TextLine]) -> float:
-    """Prefer a multi-line block with stats, near the middle of the capture, whose
-    first line looks like an item name rather than a tooltip description."""
+def _score(block: list[TextLine], focus: tuple[float, float] = (0.5, 0.5)) -> float:
+    """Prefer a multi-line block with stats near the cursor, whose first line
+    looks like an item name rather than a tooltip description."""
     if not block:
         return -1.0
     stat_lines = sum(1 for line in block if _stats_of(line.text))
     confidence = sum(line.confidence for line in block) / len(block)
     cx = sum(line.center_x for line in block) / len(block)
     cy = sum(line.center_y for line in block) / len(block)
-    distance = abs(cx - 0.5) + abs(cy - 0.5)
+    distance = abs(cx - focus[0]) + abs(cy - focus[1])
     found = _item_name(block)
     name_bonus = _name_likeness(found[0]) if found else -10.0
     return (len(block) * 1.0 + stat_lines * 3.0 + confidence * 2.0
-            - distance * 1.5 + name_bonus * 2.0)
+            - distance * 8.0 + name_bonus * 2.0)
 
 
 def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
     """The first line that looks like an item name, plus its quantity suffix if any."""
     for line in block:
-        text = line.text.strip(" .:-")
-        if not text or _is_noise(text) or _STATISH.match(text):
+        text = _clean_text(line.text)
+        if not text or _is_noise(text) or _STATISH.match(text) or _ui_like(text):
             continue
         if len(text) < 3 or len(text) > 80:
             continue
-        if text.lower() in _UI_WORDS:
+        words = text.split()
+        if words and words[0].lower() in _DESCRIPTION_STARTS and len(words) >= 3:
             continue
         if sum(ch.isalpha() for ch in text) < 3 or _CODEISH.search(text):
             continue
@@ -173,14 +207,19 @@ def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
     return None
 
 
-def parse(lines: Iterable[TextLine]) -> ShopItem | None:
-    """Best item in the OCR lines, or None when nothing looks like an item."""
+def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -> ShopItem | None:
+    """Best item in the OCR lines, or None when nothing looks like an item.
+
+    `focus` is the cursor position in the capture (0..1, origin bottom left).
+    Tooltips appear next to the cursor, so this separates them from HUD text.
+    """
+    focus = focus or (0.5, 0.5)
     clean = [line for line in lines if line.text.strip() and not _is_noise(line.text)]
     if not clean:
         return None
 
     blocks = _blocks(clean)
-    block = max(blocks, key=_score)
+    block = max(blocks, key=lambda found: _score(found, focus))
     found = _item_name(block)
     if not found:
         return None
