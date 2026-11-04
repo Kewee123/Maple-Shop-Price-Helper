@@ -133,18 +133,30 @@ def _is_noise(text: str) -> bool:
 
 
 def _blocks(lines: list[TextLine]) -> list[list[TextLine]]:
-    """Group lines that sit on top of one another with little vertical gap."""
+    """Group lines into tooltip-like blocks.
+
+    A stray count or HUD label can sit vertically between an item name and its
+    description, so each line is matched against every open block, not just the
+    most recently created one.
+    """
     if not lines:
         return []
-    lines = sorted(lines, key=lambda line: -line.top)
-    blocks: list[list[TextLine]] = [[lines[0]]]
-    for line in lines[1:]:
-        prev = blocks[-1][-1]
-        gap = prev.bottom - line.top
-        overlap = min(prev.right, line.right) - max(prev.left, line.left)
-        close = gap <= max(0.03, 1.1 * min(prev.box[3], line.box[3]))
-        if close and overlap > 0:
-            blocks[-1].append(line)
+    ordered = sorted(lines, key=lambda line: -line.top)
+    blocks: list[list[TextLine]] = [[ordered[0]]]
+    for line in ordered[1:]:
+        best_block = None
+        best_gap = None
+        for block in blocks:
+            for prev in block:
+                overlap = min(prev.right, line.right) - max(prev.left, line.left)
+                if overlap <= 0:
+                    continue
+                gap = prev.bottom - line.top
+                limit = max(0.045, 1.4 * min(prev.box[3], line.box[3]))
+                if 0 <= gap <= limit and (best_gap is None or gap < best_gap):
+                    best_gap, best_block = gap, block
+        if best_block is not None:
+            best_block.append(line)
         else:
             blocks.append([line])
     return blocks
