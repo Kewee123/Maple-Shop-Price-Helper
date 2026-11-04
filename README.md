@@ -17,12 +17,16 @@ shows a price panel next to it.
   inventory slots; inventory tabs, quest text and hover bullets are ignored.
 - Keeps the item name, stats (Req Lev, STR/DEX/INT/LUK, attack/defence, slots)
   and quantity.
-- Lets you correct the OCR name; the price lookup uses the corrected name.
+- Reads the stack count automatically from the bottom-left of the hovered
+  inventory slot. No typing: hover the stack and the total-for-stack updates.
+- Lets you correct the OCR name or quantity; the price lookup uses the
+  corrected values.
 - Manual price entries per item (and per stat variant for equipment), saved on
   this computer only.
 - Suggested list price = median × 0.95, plus the raw median, last sold, volume,
-  low/high and sources. The quantity is editable, so a stack shows the total for
-  the whole stack (e.g. 189 Aquamarine Ore).
+  low/high and sources. The stack count is read from the slot, so the panel
+  shows the total for the whole stack (e.g. 189 Aquamarine Ore). The quantity
+  stays editable as a fallback.
 - Browser buttons for **meso.watch** and **cozy.markets** (links only; no page
   reading, no data copying).
 - “Save capture” for tuning the tooltip detection.
@@ -37,6 +41,8 @@ shows a price panel next to it.
   picker (roadmap).
 - Tooltip OCR is best-effort; the item name is editable. **Save capture** writes
   the exact crop if a hover is misread, which makes parser tuning quick.
+- Slot-count reading is tuned for the 2x Retina rendering used by the Mac client.
+  On a 1x display it falls back to 1, which you can edit.
 - No automatic price API: MesoWatch is link-only by policy; manual prices plus
   browser links are the supported path.
 
@@ -62,12 +68,12 @@ helper.
 1. Start MapleStory and open your shop or inventory.
 2. Open the helper and press **Start watching** if it isn’t already watching.
 3. Hover an item for about half a second.
-4. The panel fills with the OCR’d item. Correct the name if needed.
-5. Set the **Quantity** from the inventory slot if it isn’t in the tooltip.
-6. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
+4. The panel fills with the OCR’d item and the stack count from the slot.
+   Correct the name or quantity only if the read needs it.
+5. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
    work), or click **Open MesoWatch** / **Open Cozy** to look it up yourself.
    Cozy opens its item list and copies the item name, ready to paste in Search.
-7. **Copy suggested** puts the unit price — or the total for the stack — on the
+6. **Copy suggested** puts the unit price — or the total for the stack — on the
    clipboard.
 
 The helper never clicks or types into the game. It only reads the small screen
@@ -97,6 +103,7 @@ shop_price_helper/
   capture.py    cursor, screen rectangle, screen-recording permission
   ocr.py        macOS Vision OCR (ocrmac)
   tooltip.py    OCR lines -> item name/stats/quantity
+  quantity.py   slot count -> number (12x18 pixel-font templates)
   model.py      ShopItem, PriceQuote, PriceSummary
   pricing.py    provider interface, manual store, source links
   app.py        Tk window and hover loop
@@ -109,7 +116,8 @@ caching and Windows path.
 
 - [ ] If an authorized price API is published, add it behind `PriceProvider`
       (with caching/rate limits). Until then: manual prices and links only.
-- [ ] Editable quantity and total-for-stack on the main panel.
+- [x] Automatic slot-count reading and total-for-stack on the main panel.
+- [ ] Add 1x-display count templates (currently Retina 2x is tuned).
 - [ ] Tune tooltip-box detection against real shop screenshots (send one with
       the overlay out of the way).
 - [ ] Import/export the user's own price notes (CSV), not site datasets.

@@ -2,7 +2,9 @@
 
 The capture is a small rectangle around the cursor, so the app can read the
 tooltip that appears when the player hovers a shop row. Coordinates are in
-points, which is what both CoreGraphics and mss use on macOS.
+points, which is what both CoreGraphics and mss use on macOS.  The grabbed
+image is at the display's native pixel scale: 2x on a Retina screen, so the
+tiny slot-count glyphs stay crisp enough to match.
 """
 from __future__ import annotations
 
@@ -18,6 +20,19 @@ from PIL import Image, ImageDraw
 
 DEFAULT_WIDTH = 760
 DEFAULT_HEIGHT = 600
+
+# mss asks CoreGraphics for a nominal-resolution image by default, which
+# downsamples a Retina display to 1x.  Keep the physical pixels instead; the
+# count reader and OCR both need them.
+if sys.platform == "darwin":
+    try:
+        from mss import darwin as _mss_darwin
+        _mss_darwin.IMAGE_OPTIONS = (
+            _mss_darwin.kCGWindowImageBoundsIgnoreFraming
+            | _mss_darwin.kCGWindowImageShouldBeOpaque
+        )
+    except Exception:
+        pass
 
 
 def _cg() -> ctypes.CDLL:
@@ -93,7 +108,7 @@ def region_around(x: int, y: int, width: int = DEFAULT_WIDTH,
 
 
 def grab(region: dict[str, int], exclude: tuple[int, int, int, int] | None = None) -> Image.Image:
-    """Grab one rectangle as an RGB PIL image.
+    """Grab one rectangle as an RGB PIL image at the display's pixel scale.
 
     `exclude` is a screen rectangle (left, top, right, bottom) to black out, normally
     this helper's own window so its text can never be mistaken for a game tooltip.
@@ -104,10 +119,12 @@ def grab(region: dict[str, int], exclude: tuple[int, int, int, int] | None = Non
         image = Image.fromarray(pixels[:, :, :3][:, :, ::-1])   # RGB
     if exclude:
         left, top, right, bottom = exclude
-        x0 = max(0, left - region["left"])
-        y0 = max(0, top - region["top"])
-        x1 = min(image.width, right - region["left"])
-        y1 = min(image.height, bottom - region["top"])
+        scale_x = image.width / region["width"]
+        scale_y = image.height / region["height"]
+        x0 = max(0, int((left - region["left"]) * scale_x))
+        y0 = max(0, int((top - region["top"]) * scale_y))
+        x1 = min(image.width, int((right - region["left"]) * scale_x))
+        y1 = min(image.height, int((bottom - region["top"]) * scale_y))
         if x1 > x0 and y1 > y0:
             ImageDraw.Draw(image).rectangle([x0, y0, x1 - 1, y1 - 1], fill=(0, 0, 0))
     return image

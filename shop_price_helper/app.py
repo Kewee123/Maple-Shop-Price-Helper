@@ -11,7 +11,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import messagebox
 
-from . import __version__, capture, ocr, tooltip
+from . import __version__, capture, ocr, quantity, tooltip
 from .model import PriceQuote, ShopItem, fmt_mesos, fmt_volume, parse_count, parse_mesos
 from .pricing import ManualPriceProvider, ManualStore, PriceService, app_data_dir, site_links
 
@@ -64,6 +64,7 @@ class ShopPriceApp:
         self._editing_name = False
         self._last_image = None
         self._last_focus = None
+        self._last_cursor: tuple[tuple[float, float], float] | None = None
         self._own_rect = None
         self._suggested_unit = self._suggested_total = None
         self._watching = threading.Event()
@@ -142,7 +143,7 @@ class ShopPriceApp:
                                   relief="flat", highlightthickness=1, highlightbackground=CARD_2,
                                   highlightcolor=ACCENT)
         self.qty_entry.pack(side="left", padx=(8, 0))
-        _label(qty_row, "type the stack size", size=9, color=FAINT, bg=CARD).pack(
+        _label(qty_row, "auto-read from the hovered slot", size=9, color=FAINT, bg=CARD).pack(
             side="left", padx=(8, 0))
         self.qty_entry.bind("<Return>", lambda _e: self._quantity_changed())
         self.qty_entry.bind("<FocusOut>", lambda _e: self._quantity_changed())
@@ -304,15 +305,30 @@ class ShopPriceApp:
                 continue
             last_frame = image
             last_processed = now
+            scale_x = image.width / region["width"]
+            scale_y = image.height / region["height"]
+            cursor_px = ((pos[0] - region["left"]) * scale_x,
+                         (pos[1] - region["top"]) * scale_y)
             self._last_image = image
             self._last_focus = focus
+            self._last_cursor = (cursor_px, (scale_x + scale_y) / 2)
             try:
                 lines = ocr.recognize(image)
                 item = tooltip.parse(lines, focus)
+                self._apply_screen_quantity(item, image)
                 self._queue.put(("ocr", item, lines, image))
             except Exception as exc:
                 self._queue.put(("error", f"OCR failed: {exc}"))
             time.sleep(0.2)
+
+    def _apply_screen_quantity(self, item: ShopItem | None, image) -> None:
+        """Fill the stack count from the hovered slot when the tooltip doesn't say it."""
+        if item is None or item.quantity > 1 or self._last_cursor is None:
+            return
+        cursor_px, scale = self._last_cursor
+        count = quantity.read_count(image, cursor_px, scale)
+        if count is not None:
+            item.quantity = count
 
     def _poll(self):
         try:
@@ -340,7 +356,8 @@ class ShopPriceApp:
             self._set_status("Text found, but no item tooltip in it. Move over an item and hold still.")
             self._raw_lines([line.text for line in lines])
             return
-        self._set_status(f"Read {item.name} ({item.confidence * 100:.0f}% OCR confidence).")
+        stack = f" · stack {item.quantity}" if item.quantity > 1 else ""
+        self._set_status(f"Read {item.name}{stack} ({item.confidence * 100:.0f}% OCR confidence).")
         self.item = item
         self.name_var.set(item.name)
         self._show_item()
@@ -391,7 +408,9 @@ class ShopPriceApp:
             return
         try:
             lines = ocr.recognize(self._last_image)
-            self._show_ocr(tooltip.parse(lines, self._last_focus), lines)
+            item = tooltip.parse(lines, self._last_focus)
+            self._apply_screen_quantity(item, self._last_image)
+            self._show_ocr(item, lines)
         except Exception as exc:
             self._set_status(f"OCR failed: {exc}")
 

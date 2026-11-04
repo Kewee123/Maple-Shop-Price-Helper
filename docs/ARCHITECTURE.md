@@ -25,8 +25,10 @@ cursor ──► capture around cursor ──► macOS Vision OCR
 ### `capture.py`
 
 - `mouse_position()` uses `CGEventGetLocation` (top-left points, same as `mss`).
-- `region_around()` clips a 640×560 rectangle to the monitor under the cursor.
-- `grab()` returns an RGB `PIL.Image`.
+- `region_around()` clips a 760×600-point rectangle to the monitor under the
+  cursor.
+- `grab()` returns an RGB `PIL.Image` at the display's native pixel scale (2x on
+  Retina), with the helper's own window blacked out in image coordinates.
 - `frame_difference()` is a downscaled mean-absolute-difference check, so OCR
   only runs when a tooltip actually appears/changes.
 - `screen_recording_granted()` / `request_screen_recording()` wrap the
@@ -60,6 +62,19 @@ A shop capture includes chat and HUD text. The parser:
 
 The item name is editable in the window because OCR on a small tooltip will not
 be perfect.
+
+### `quantity.py`
+
+Classic draws an inventory stack count at the bottom-left of the slot in a tiny
+pixel font that Vision OCR does not read reliably. This module matches the 12x18
+light-fill glyphs directly (the `1` is 6x18). It searches only the rectangle
+around the cursor, groups adjacent digits, prefers the group nearest the cursor,
+and rejects groups separated from the cursor by a bright slot border. A wide
+component caused by an icon highlight is trimmed before matching.
+
+The templates are for the 2x Retina rendering. A 1x capture is still attempted,
+but if the count is not confident the item keeps its previous quantity (usually
+`1`) instead of guessing.
 
 ### `pricing.py`
 
