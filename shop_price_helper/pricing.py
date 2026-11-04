@@ -53,13 +53,16 @@ class PriceProvider(ABC):
 SITE_LINKS = {
     # Browser links only. The app never fetches these pages or copies their data.
     "MesoWatch": "https://meso.watch/?q={query}",
-    "Cozy Market": "https://cozy.markets/items?q={query}",
+    # Cozy's item search is client-side and does not read a query parameter.
+    # Open the list; the app copies the item name so it can be pasted.
+    "Cozy Market": "https://cozy.markets/items",
 }
 
 
 def site_links(item: ShopItem) -> list[tuple[str, str]]:
     """Where the user can look the item up themselves, in a normal browser."""
-    return [(name, template.format(query=quote_plus(item.name))) for name, template in SITE_LINKS.items()]
+    return [(name, template.format(query=quote_plus(item.name)) if "{query}" in template else template)
+            for name, template in SITE_LINKS.items()]
 
 
 class ManualStore:

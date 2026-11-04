@@ -27,9 +27,10 @@ browser link when the user clicks a button.
 - The app does not bypass that gate and does not fetch item data.
 - Clicking **Open Cozy** only opens:
 
-  `https://cozy.markets/items?q=<item name>`
+  `https://cozy.markets/items`
 
-  in the user's browser.
+  and copies the item name to the clipboard so the user can paste it into
+  Cozy's own search box. (Cozy's search is client-side; it ignores `?q=`.)
 - If Cozy Market ever publishes an official third-party API, it can be added
   behind the `PriceProvider` interface after reading its terms.
 

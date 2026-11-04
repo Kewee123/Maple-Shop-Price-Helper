@@ -83,7 +83,8 @@ class ManualStoreTests(unittest.TestCase):
         item = ShopItem(name="Blue Dragon Helmet")
         links = dict(site_links(item))
         self.assertIn("Blue+Dragon+Helmet", links["MesoWatch"])
-        self.assertIn("Blue+Dragon+Helmet", links["Cozy Market"])
+        # Cozy's search is client-side, so it opens the list instead of a dead query.
+        self.assertEqual(links["Cozy Market"], "https://cozy.markets/items")
 
 
 if __name__ == "__main__":

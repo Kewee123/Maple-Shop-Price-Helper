@@ -457,6 +457,13 @@ class ShopPriceApp:
         for name, url in site_links(self.item):
             if name == which:
                 webbrowser.open(url)
+                if name == "Cozy Market":
+                    try:
+                        self.root.clipboard_clear()
+                        self.root.clipboard_append(self.item.name)
+                        self._set_status("Opened Cozy Market. Item name copied — paste it in Search.")
+                    except tk.TclError:
+                        self._set_status("Opened Cozy Market. Type the item name in Search.")
                 return
 
     def _copy_suggested(self):

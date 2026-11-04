@@ -59,13 +59,14 @@ helper.
 
 ## Use
 
-1. Start MapleStory and open your shop.
+1. Start MapleStory and open your shop or inventory.
 2. Open the helper and press **Start watching** if it isn’t already watching.
-3. Hover an item in the shop for about half a second.
+3. Hover an item for about half a second.
 4. The panel fills with the OCR’d item. Correct the name if needed.
 5. Set the **Quantity** from the inventory slot if it isn’t in the tooltip.
 6. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
    work), or click **Open MesoWatch** / **Open Cozy** to look it up yourself.
+   Cozy opens its item list and copies the item name, ready to paste in Search.
 7. **Copy suggested** puts the unit price — or the total for the stack — on the
    clipboard.
 
