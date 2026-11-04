@@ -316,7 +316,15 @@ class ShopPriceApp:
                 lines = ocr.recognize(image)
                 item = tooltip.parse(lines, focus)
                 self._apply_screen_quantity(item, image)
-                self._queue.put(("ocr", item, lines, image))
+                # OCR can take long enough for the cursor to move to another
+                # slot. Never let a result for the old hover replace the new
+                # item in the UI.
+                current_pos = capture.mouse_position()
+                if current_pos is not None and (
+                    abs(current_pos[0] - pos[0]) > 3 or abs(current_pos[1] - pos[1]) > 3
+                ):
+                    continue
+                self._queue.put(("ocr", pos, item, lines, image))
             except Exception as exc:
                 self._queue.put(("error", f"OCR failed: {exc}"))
             time.sleep(0.2)
@@ -335,7 +343,13 @@ class ShopPriceApp:
             while True:
                 kind, *payload = self._queue.get_nowait()
                 if kind == "ocr":
-                    item, lines, image = payload
+                    captured_pos, item, lines, image = payload
+                    current_pos = capture.mouse_position()
+                    if current_pos is not None and (
+                        abs(current_pos[0] - captured_pos[0]) > 3
+                        or abs(current_pos[1] - captured_pos[1]) > 3
+                    ):
+                        continue
                     self._last_image = image
                     self._show_ocr(item, lines)
                 elif kind == "error":

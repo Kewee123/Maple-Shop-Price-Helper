@@ -24,6 +24,7 @@ _NOISE = re.compile(
 # Most specific first: "Magic Attack" must be tried before "Attack".
 _STATS: tuple[tuple[str, str], ...] = (
     ("Req Lev", r"req(?:uired)?\s*lev(?:el)?\s*[:：]?\s*(\d+)"),
+    ("Type", r"type\s*[:：]?\s*([A-Za-z][A-Za-z -]*)"),
     ("Class", r"class\s*[:：]?\s*([A-Za-z ]+)"),
     ("STR", r"\bstr\s*[:=]?\s*([+-]?\s*\d+)"),
     ("DEX", r"\bdex\s*[:=]?\s*([+-]?\s*\d+)"),
@@ -31,24 +32,30 @@ _STATS: tuple[tuple[str, str], ...] = (
     ("LUK", r"\bluk\s*[:=]?\s*([+-]?\s*\d+)"),
     ("HP", r"\bhp\s*[:=]?\s*([+-]?\s*\d+)"),
     ("MP", r"\bmp\s*[:=]?\s*([+-]?\s*\d+)"),
-    ("Weapon Attack", r"weapon\s*att(?:ack)?\s*[:：]?\s*(\d+)"),
-    ("Magic Attack", r"magic\s*att(?:ack)?\s*[:：]?\s*(\d+)"),
-    ("Attack", r"\batt(?:ack)?\s*[:：]?\s*(\d+)"),
-    ("Weapon DEF", r"weapon\s*def(?:ense)?\s*[:：]?\s*(\d+)"),
-    ("Magic DEF", r"magic\s*def(?:ense)?\s*[:：]?\s*(\d+)"),
-    ("DEF", r"\bdef(?:ense)?\s*[:：]?\s*(\d+)"),
-    ("Accuracy", r"accuracy\s*[:：]?\s*(\d+)"),
-    ("Avoidability", r"avoid(?:ability)?\s*[:：]?\s*(\d+)"),
-    ("Speed", r"\bspeed\s*[:：]?\s*(\d+)"),
-    ("Jump", r"\bjump\s*[:：]?\s*(\d+)"),
+    ("Weapon Attack", r"weapon\s*att(?:ack)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Magic Attack", r"magic\s*att(?:ack)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Attack", r"\batt(?:ack)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Weapon DEF", r"weapon\s*def(?:ense)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Magic DEF", r"magic\s*def(?:ense)?\s*[:：]?\s*([+-]?\d+)"),
+    ("DEF", r"\bdef(?:ense)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Accuracy", r"accuracy\s*[:：]?\s*([+-]?\d+)"),
+    ("Avoidability", r"avoid(?:ability)?\s*[:：]?\s*([+-]?\d+)"),
+    ("Speed", r"\bspeed\s*[:：]?\s*([+-]?\d+)"),
+    ("Jump", r"\bjump\s*[:：]?\s*([+-]?\d+)"),
+    ("Attack Speed", r"attack\s*speed\s*[:：]?\s*([A-Za-z]+)"),
     ("Slots", r"slots?\s*[:：]?\s*(\d+)"),
-    ("Upgrades", r"upgrades?\s*[:：]?\s*(\d+)"),
+    ("Upgrades", r"(?:upgrades?|remaining\s*enhancements)\s*[:：]?\s*(\d+)"),
     ("Quantity", r"(?:quantity|qty)\s*[:：]?\s*(\d+)"),
 )
 
 _QUANTITY_SUFFIX = re.compile(r"\s*(?:[x×]\s*(\d+))\s*$", re.IGNORECASE)
 _STATISH = re.compile(
-    r"^(?:req|class|str|dex|int|luk|hp|mp|weapon|magic|attack|def|accuracy|avoid|speed|jump|slots?|upgrades?|quantity|qty)\b",
+    r"^(?:req|required|type|class|str|dex|int|luk|hp|mp|weapon|magic|attack|def|accuracy|avoid|speed|jump|slots?|upgrades?|remaining|quantity|qty)\b",
+    re.IGNORECASE,
+)
+_META_LINE = re.compile(
+    r"^(?:quest\s+item|untradeable|tradeable|account[- ]bound|"
+    r"usable\s+until|cash\s+item|expires?)\b",
     re.IGNORECASE,
 )
 _CODEISH = re.compile(r"(&&|\|\||[<>/\\{}\[\]_=]|\.venv|\bpython\b|\bpip\b|/tmp|\bcd\b)", re.IGNORECASE)
@@ -201,7 +208,8 @@ def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
     """The first line that looks like an item name, plus its quantity suffix if any."""
     for line in block:
         text = _clean_text(line.text)
-        if not text or _is_noise(text) or _STATISH.match(text) or _ui_like(text):
+        if (not text or _is_noise(text) or _STATISH.match(text)
+                or _META_LINE.match(text) or _ui_like(text)):
             continue
         if len(text) < 3 or len(text) > 80:
             continue
@@ -233,7 +241,7 @@ def _tooltip_like(block: list[TextLine], found: tuple[str, int]) -> bool:
     texts = [_clean_text(line.text) for line in block if _clean_text(line.text)]
     if len(texts) < 2:
         return False
-    if any(_QUEST_PROGRESS.search(text) for text in texts):
+    if any(_QUEST_PROGRESS.search(text) and not _META_LINE.match(text) for text in texts):
         return False
     return True
 
@@ -271,8 +279,9 @@ def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -
     category = "item"
     if name.lower().startswith("scroll"):
         category = "scroll"
-    elif any(key in stats for key in ("Req Lev", "Slots", "Weapon Attack", "Magic Attack",
-                                      "Weapon DEF", "Magic DEF", "DEF", "Attack")):
+    elif any(key in stats for key in ("Req Lev", "Type", "Attack Speed", "Slots",
+                                      "Weapon Attack", "Magic Attack", "Weapon DEF",
+                                      "Magic DEF", "DEF", "Attack")):
         category = "equip"
     elif "Quantity" in stats or quantity > 1:
         category = "stackable"

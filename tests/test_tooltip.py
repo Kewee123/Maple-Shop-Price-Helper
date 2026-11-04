@@ -34,6 +34,35 @@ class TooltipParseTests(unittest.TestCase):
         self.assertEqual(item.quantity, 1)
         self.assertIn("STR=+2", item.variant)
 
+    def test_equipment_tooltip_layout_with_type_and_attack_speed(self):
+        item = parse(stack(
+            "Beginner's Triangular Zamadar",
+            "REQ LEV: 10",
+            "REQ INT: 0",
+            "REQ LUK: 20",
+            "Type: Dagger",
+            "Attack Speed: Fast",
+            "Weapon Attack: +27",
+            "Remaining Enhancements: 7",
+        ))
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Beginner's Triangular Zamadar")
+        self.assertEqual(item.category, "equip")
+        self.assertEqual(item.stats["Type"], "Dagger")
+        self.assertEqual(item.stats["Attack Speed"], "Fast")
+        self.assertEqual(item.stats["Weapon Attack"], "+27")
+        self.assertEqual(item.stats["Upgrades"], "7")
+
+    def test_item_status_lines_do_not_replace_name(self):
+        item = parse(stack(
+            "Maple Leaf",
+            "Quest Item, Untradable",
+            "Usable Until: 11/19/2026 00:00 UTC",
+            "A bright red leaf that drifts down.",
+        ))
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Maple Leaf")
+
     def test_quantity_and_stackable(self):
         item = parse(stack("Blue Potion", "Quantity: 100"))
         self.assertIsNotNone(item)
