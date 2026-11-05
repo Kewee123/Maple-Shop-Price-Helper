@@ -71,6 +71,12 @@ _UI_PHRASES = {"iteminventory", "inventory", "freemarket", "questhelper"}
 _UI_PREFIXES = ("iteminventory", "questhelper")
 
 _DESCRIPTION_STARTS = {"the", "a", "an", "this", "it", "you", "your", "when", "while", "can"}
+_WEAPON_TYPES = {
+    "bow", "crossbow", "dagger", "gun", "knuckle", "one-handed axe",
+    "one-handed blunt weapon", "one-handed sword", "pole arm", "spear",
+    "staff", "two-handed axe", "two-handed blunt weapon",
+    "two-handed sword", "wand",
+}
 
 # The hover highlight puts a bullet (or similar glyph) in front of the item name.
 _LEADING_MARKS = re.compile(r"^[\s•·●○◆◇■□▪▫►▶➤➢»*\-–—]+")
@@ -279,6 +285,8 @@ def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -
     category = "item"
     if name.lower().startswith("scroll"):
         category = "scroll"
+    elif stats.get("Type", "").strip().lower() in _WEAPON_TYPES or "Weapon Attack" in stats:
+        category = "weapon"
     elif any(key in stats for key in ("Req Lev", "Type", "Attack Speed", "Slots",
                                       "Weapon Attack", "Magic Attack", "Weapon DEF",
                                       "Magic DEF", "DEF", "Attack")):
@@ -286,11 +294,23 @@ def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -
     elif "Quantity" in stats or quantity > 1:
         category = "stackable"
 
+    description = ""
+    if category == "weapon":
+        name_index = next((index for index, line in enumerate(block)
+                           if _clean_text(line.text) == name), -1)
+        prose = []
+        for line in block[name_index + 1:]:
+            text = " ".join(str(line.text).split()).strip()
+            if text and not _stats_of(text) and not _META_LINE.match(text):
+                prose.append(text)
+        description = " ".join(prose)
+
     confidence = sum(line.confidence for line in block) / len(block)
     return ShopItem(
         name=name,
         lines=[line.text for line in block],
         stats=stats,
+        description=description,
         quantity=quantity,
         category=category,
         confidence=confidence,

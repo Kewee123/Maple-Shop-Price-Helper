@@ -30,8 +30,9 @@ shows a price panel next to it.
 - Browser buttons for **meso.watch** and **cozy.markets** (links only; no page
   reading, no data copying).
 - “Save capture” for tuning the tooltip detection.
-- No network requests in this build. Opening a site button launches your normal
-  browser; nothing is sent by the app.
+- The optional weapon API lookup sends only read-only requests to the documented
+  mesos.watch API when `MESOS_WATCH_SESSION` is configured. Opening a site
+  button launches your normal browser; site pages are never read or copied.
 
 ## Current limits
 
@@ -43,8 +44,9 @@ shows a price panel next to it.
   the exact crop if a hover is misread, which makes parser tuning quick.
 - Slot-count reading is tuned for the 2x Retina rendering used by the Mac client.
   On a 1x display it falls back to 1, which you can edit.
-- No automatic price API: MesoWatch is link-only by policy; manual prices plus
-  browser links are the supported path.
+- Weapon prices can optionally use the documented mesos.watch API when
+  `MESOS_WATCH_SESSION` contains the user's own authorized `mw_s` session
+  value. Other items remain manual/browser-link only.
 
 ## Install (macOS)
 
@@ -84,8 +86,14 @@ area around the cursor.
 - Manual prices: `~/Library/Application Support/MapleShopPriceHelper/prices.json`
 - Saved captures: `~/Library/Application Support/MapleShopPriceHelper/captures/`
 
-Nothing is uploaded. The two site buttons only open a browser URL; the app never
-reads the page or stores its contents.
+Nothing is uploaded by default. The two site buttons only open a browser URL.
+When `MESOS_WATCH_SESSION` is configured, the app sends read-only API requests
+for weapon catalog, summary and history data; it never bypasses Turnstile or
+reads the website. Start it like this:
+
+```bash
+MESOS_WATCH_SESSION='your_mw_s_cookie_value' ./run.sh
+```
 
 ## Tests
 
@@ -109,8 +117,9 @@ shop_price_helper/
   app.py        Tk window and hover loop
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the planned provider API,
-caching and Windows path.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the provider API,
+caching and Windows path. The captured mesos.watch endpoint reference is in
+[docs/apis.md](docs/apis.md).
 
 ## Roadmap
 

@@ -94,13 +94,14 @@ class ShopItem:
     name: str
     lines: list[str] = field(default_factory=list)
     stats: dict[str, str] = field(default_factory=dict)
+    description: str = ""
     quantity: int = 1
     category: str = ""
     confidence: float = 0.0
 
     @property
     def variant(self) -> str:
-        if self.category not in ("equip", "scroll"):
+        if self.category not in ("equip", "weapon", "scroll"):
             return ""
         return "|".join(f"{k}={v}" for k, v in sorted(self.stats.items()) if k != "Quantity")
 
@@ -111,11 +112,32 @@ class ShopItem:
 
     @property
     def display_stats(self) -> list[tuple[str, str]]:
-        return [(k, v) for k, v in self.stats.items() if k != "Quantity"]
+        if not self.is_weapon:
+            return []
+        return [(k, v) for k, v in self.stats.items()
+                if k != "Quantity" and k in self.weapon_stat_labels]
+
+    @property
+    def is_weapon(self) -> bool:
+        weapon_type = self.stats.get("Type", "").lower()
+        return weapon_type in {
+            "bow", "crossbow", "dagger", "gun", "knuckle", "one-handed axe",
+            "one-handed blunt weapon", "one-handed sword", "pole arm", "spear",
+            "staff", "two-handed axe", "two-handed blunt weapon",
+            "two-handed sword", "wand",
+        } or "Weapon Attack" in self.stats
+
+    @property
+    def weapon_stat_labels(self) -> set[str]:
+        return {
+            "Req Lev", "Req STR", "Req DEX", "Req INT", "Req LUK", "Type",
+            "Attack Speed", "Weapon Attack", "Attack", "Slots", "Upgrades",
+        }
 
     def renamed(self, name: str) -> "ShopItem":
         return ShopItem(name=name.strip() or self.name, lines=list(self.lines), stats=dict(self.stats),
-                        quantity=self.quantity, category=self.category, confidence=self.confidence)
+                        description=self.description, quantity=self.quantity, category=self.category,
+                        confidence=self.confidence)
 
 
 @dataclass

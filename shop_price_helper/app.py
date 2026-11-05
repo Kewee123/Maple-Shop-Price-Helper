@@ -14,6 +14,7 @@ from tkinter import messagebox
 from . import __version__, capture, ocr, quantity, tooltip
 from .model import PriceQuote, ShopItem, fmt_mesos, fmt_volume, parse_count, parse_mesos
 from .pricing import ManualPriceProvider, ManualStore, PriceService, app_data_dir, site_links
+from .mesos_watch import MesosWatchProvider
 
 BG = "#11151c"
 CARD = "#19212d"
@@ -71,9 +72,13 @@ class ShopPriceApp:
         self._force_read = threading.Event()
         self._stop = threading.Event()
         self._queue: queue.Queue = queue.Queue()
+        self._lookup_generation = 0
 
         self.manual_store = ManualStore()
-        self.service = PriceService([ManualPriceProvider(self.manual_store)])
+        self.service = PriceService([
+            ManualPriceProvider(self.manual_store),
+            MesosWatchProvider(),
+        ])
 
         self._build()
         self._apply_topmost()
@@ -133,6 +138,9 @@ class ShopPriceApp:
         self.stats_var = tk.StringVar(value="Hover an item in your shop or inventory.")
         _label(inner, textvariable=self.stats_var, size=11, color=DIM, bg=CARD,
                wraplength=520).pack(anchor="w")
+        self.description_var = tk.StringVar(value="")
+        _label(inner, textvariable=self.description_var, size=10, color=FAINT, bg=CARD,
+               wraplength=520).pack(anchor="w", pady=(4, 0))
 
         qty_row = tk.Frame(inner, bg=CARD)
         qty_row.pack(fill="x", pady=(6, 0))
@@ -203,7 +211,7 @@ class ShopPriceApp:
         # ---- footer
         footer = tk.Frame(outer, bg=BG)
         footer.pack(fill="x", pady=(2, 0))
-        _label(footer, "Manual prices only. MesoWatch is link-only; no site data is copied.",
+        _label(footer, "Manual prices plus optional weapon API lookup. No site pages are copied.",
                size=9, color=FAINT, wraplength=250).pack(side="left")
         _button(footer, "Allow screen…", self._ask_screen).pack(side="right")
         self.topmost_var = tk.BooleanVar(value=True)
@@ -339,27 +347,33 @@ class ShopPriceApp:
             item.quantity = count
 
     def _poll(self):
+        latest_ocr = None
         try:
             while True:
                 kind, *payload = self._queue.get_nowait()
                 if kind == "ocr":
-                    captured_pos, item, lines, image = payload
-                    current_pos = capture.mouse_position()
-                    if current_pos is not None and (
-                        abs(current_pos[0] - captured_pos[0]) > 3
-                        or abs(current_pos[1] - captured_pos[1]) > 3
-                    ):
-                        continue
-                    self._last_image = image
-                    self._show_ocr(item, lines)
+                    latest_ocr = payload
                 elif kind == "error":
                     self._set_status(payload[0])
                 elif kind == "status":
                     self._set_status(payload[0])
+                elif kind == "prices":
+                    generation, item, summary, notices = payload
+                    if generation == self._lookup_generation and item is self.item:
+                        self._show_prices(item, summary, notices)
         except queue.Empty:
             pass
         except Exception as exc:
             self._set_status(f"{type(exc).__name__}: {exc}")
+        if latest_ocr is not None:
+            captured_pos, item, lines, image = latest_ocr
+            current_pos = capture.mouse_position()
+            if current_pos is None or (
+                abs(current_pos[0] - captured_pos[0]) <= 3
+                and abs(current_pos[1] - captured_pos[1]) <= 3
+            ):
+                self._last_image = image
+                self._show_ocr(item, lines)
         if not self._stop.is_set():
             self.root.after(120, self._poll)
 
@@ -367,6 +381,9 @@ class ShopPriceApp:
         if self._editing_name:
             return
         if item is None:
+            self.item = None
+            self._show_item()
+            self._clear_prices()
             self._set_status("Text found, but no item tooltip in it. Move over an item and hold still.")
             self._raw_lines([line.text for line in lines])
             return
@@ -380,11 +397,15 @@ class ShopPriceApp:
     def _show_item(self):
         if not self.item:
             self.stats_var.set("Hover an item in your shop or inventory.")
+            self.description_var.set("")
             self._raw_lines([])
             return
         self.qty_var.set(str(self.item.quantity or 1))
         bits = [f"{key}: {value}" for key, value in self.item.display_stats]
-        self.stats_var.set("   ".join(bits) if bits else f"{self.item.category or 'item'} · no stats read")
+        self.stats_var.set("   ".join(bits) if bits else
+                           (f"{self.item.category or 'item'} · no weapon stats read"
+                            if self.item.category == "weapon" else ""))
+        self.description_var.set(self.item.description)
         self._raw_lines(self.item.lines)
 
     def _raw_lines(self, lines):
@@ -451,10 +472,22 @@ class ShopPriceApp:
 
     # --------------------------------------------------------------- prices
     def _lookup(self):
+        self._lookup_generation += 1
+        generation = self._lookup_generation
         if not self.item:
             self._clear_prices()
             return
-        summary, notices = self.service.lookup(self.item)
+        item = self.item
+        self._clear_prices()
+        self.notice_var.set("Looking up prices…")
+
+        def lookup() -> None:
+            summary, notices = self.service.lookup(item)
+            self._queue.put(("prices", generation, item, summary, notices))
+
+        threading.Thread(target=lookup, daemon=True).start()
+
+    def _show_prices(self, item: ShopItem, summary, notices: list[str]):
         self.price_vars["typical"].set(fmt_mesos(summary.typical))
         self.price_vars["last"].set(fmt_mesos(summary.last))
         self.price_vars["volume"].set(fmt_volume(summary.volume))
@@ -463,7 +496,7 @@ class ShopPriceApp:
             if summary.low is not None or summary.high is not None else "—")
         self.price_vars["sources"].set(", ".join(summary.sources) or "none")
         suggested = summary.suggested()
-        quantity = max(1, self.item.quantity)
+        quantity = max(1, item.quantity)
         self._suggested_unit = suggested
         self._suggested_total = suggested * quantity if suggested is not None else None
         self.suggested_var.set(fmt_mesos(suggested) if suggested is not None else "—")

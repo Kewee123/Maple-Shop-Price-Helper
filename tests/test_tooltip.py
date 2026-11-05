@@ -47,11 +47,31 @@ class TooltipParseTests(unittest.TestCase):
         ))
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Beginner's Triangular Zamadar")
-        self.assertEqual(item.category, "equip")
+        self.assertEqual(item.category, "weapon")
         self.assertEqual(item.stats["Type"], "Dagger")
         self.assertEqual(item.stats["Attack Speed"], "Fast")
         self.assertEqual(item.stats["Weapon Attack"], "+27")
         self.assertEqual(item.stats["Upgrades"], "7")
+
+    def test_weapon_description_and_display_stats_are_kept(self):
+        item = parse(stack(
+            "Maple Sword",
+            "A sword forged from sturdy maple.",
+            "Type: Dagger",
+            "Weapon Attack: +35",
+            "Weapon DEF: 2",
+            "Slots: 7",
+        ))
+        self.assertEqual(item.category, "weapon")
+        self.assertEqual(item.description, "A sword forged from sturdy maple.")
+        self.assertEqual(dict(item.display_stats), {
+            "Type": "Dagger", "Weapon Attack": "+35", "Slots": "7",
+        })
+
+    def test_non_weapon_description_and_stats_are_not_displayed(self):
+        item = parse(stack("Blue Potion", "Restores 50 HP.", "Quantity: 10"))
+        self.assertEqual(item.description, "")
+        self.assertEqual(item.display_stats, [])
 
     def test_item_status_lines_do_not_replace_name(self):
         item = parse(stack(

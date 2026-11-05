@@ -14,7 +14,7 @@ cursor ──► capture around cursor ──► macOS Vision OCR
                     ┌─────────────────┴─────────────────┐
                     ▼                                   ▼
              manual price store              authorized providers only
-                    │                         (none for MesoWatch)
+                    │                         (mesos.watch, weapons only)
                     └─────────────────┬─────────────────┘
                                       ▼
                               PriceSummary → window
@@ -89,13 +89,12 @@ class PriceProvider:
 ```
 
 - `ManualPriceProvider` reads `prices.json` in the app data folder.
-- `site_links()` returns the browser URLs for MesoWatch and Cozy Market. There is
-  **no MesoWatch provider**: it has no public API and does not share its data, so
-  the app must not copy it. Cozy item endpoints need a browser pass, so there is
-  no automated Cozy provider either.
-- If an authorized third-party API is published later, implement `PriceProvider`
-  behind `PriceService`. Until then, the only data source is the user's own
-  manual notes.
+- `MesosWatchProvider` is an opt-in, read-only provider for weapons. It uses the
+  documented `/item/names`, `/item/summary` and `/item/{id}/history` endpoints
+  only when `MESOS_WATCH_SESSION` contains the user's own authorized `mw_s`
+  value; it never performs the Turnstile challenge.
+- `site_links()` returns browser URLs for MesoWatch and Cozy Market. Cozy item
+  endpoints still need a browser pass, so there is no automated Cozy provider.
 - `PriceService` combines quotes into a `PriceSummary`: median typical, last,
   summed volume, low/high and suggested list price.
 
