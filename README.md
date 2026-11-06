@@ -2,12 +2,14 @@
 
 A Mac-first companion for MapleStory Classic shop owners. Hover an item in a
 shop or in your inventory; the helper reads the tooltip on your own screen and
-shows a price panel next to it.
+opens the item in MesoWatch.
 
-> **Status: prototype.** It reads shop tooltips and keeps manual prices. It does
-> **not** fetch from meso.watch or cozy.markets: **MesoWatch has no public API and
-> does not share its data — do not copy it.** Cozy Market's item endpoints need a
-> browser pass. The app is manual prices plus browser links only.
+The compact helper positions itself beside the MapleStory window when it first
+opens. MesoWatch is positioned and sized once per app session; later item
+searches reuse that browser layout and only update the search.
+
+> **Status: prototype.** It reads shop tooltips and uses browser automation to
+> search MesoWatch. Prices are displayed by MesoWatch, not copied into the app.
 > See [docs/PERMISSIONS.md](docs/PERMISSIONS.md).
 
 ## What works
@@ -19,20 +21,18 @@ shows a price panel next to it.
   and quantity.
 - Reads the stack count automatically from the bottom-left of the hovered
   inventory slot. No typing: hover the stack and the total-for-stack updates.
-- Lets you correct the OCR name or quantity; the price lookup uses the
-  corrected values.
-- Manual price entries per item (and per stat variant for equipment), saved on
-  this computer only.
-- Suggested list price = median × 0.95, plus the raw median, last sold, volume,
-  low/high and sources. The stack count is read from the slot, so the panel
-  shows the total for the whole stack (e.g. 189 Aquamarine Ore). The quantity
-  stays editable as a fallback.
-- Browser buttons for **meso.watch** and **cozy.markets** (links only; no page
-  reading, no data copying).
+- Lets you correct the OCR name or quantity before searching.
+- Automatically reuses an existing MesoWatch tab, enters the item in
+  **Filter items…**, and selects the matching item.
+- Cross-references the OCR name against a bundled 5,576-item copy of MeowDB's
+  MapleStory Classic Item Database A-Z index; unrecognized names are not sent
+  to MesoWatch, so scans do not wait on a MeowDB page.
+- Positions the MesoWatch window in the lower-right corner, below the helper
+  when screen space allows, and sizes it to the available space outside the
+  MapleStory window.
+- A **Retry search** button is available when the browser action needs
+  to be repeated.
 - “Save capture” for tuning the tooltip detection.
-- The optional weapon API lookup sends only read-only requests to the documented
-  mesos.watch API when `MESOS_WATCH_SESSION` is configured. Opening a site
-  button launches your normal browser; site pages are never read or copied.
 
 ## Current limits
 
@@ -44,9 +44,6 @@ shows a price panel next to it.
   the exact crop if a hover is misread, which makes parser tuning quick.
 - Slot-count reading is tuned for the 2x Retina rendering used by the Mac client.
   On a 1x display it falls back to 1, which you can edit.
-- Weapon prices can optionally use the documented mesos.watch API when
-  `MESOS_WATCH_SESSION` contains the user's own authorized `mw_s` session
-  value. Other items remain manual/browser-link only.
 
 ## Install (macOS)
 
@@ -72,28 +69,25 @@ helper.
 3. Hover an item for about half a second.
 4. The panel fills with the OCR’d item and the stack count from the slot.
    Correct the name or quantity only if the read needs it.
-5. Type a price with **Set price…** (values like `1.2m`, `500k` and `1,234,567`
-   work), or click **Open MesoWatch** / **Open Cozy** to look it up yourself.
-   Cozy opens its item list and copies the item name, ready to paste in Search.
-6. **Copy suggested** puts the unit price — or the total for the stack — on the
-   clipboard.
+5. The helper automatically searches the scanned item in MesoWatch. Use
+   **Retry search** if needed. MesoWatch shows the last-sold and
+   average prices in the browser.
 
+To enable automatic MesoWatch searching on macOS, open Chrome's macOS menu bar
+and choose **Develop → Allow JavaScript from Apple Events**. You may set
+`MESO_WATCH_BROWSER` if you use a Chromium browser with a different app name.
+The app's **Chrome setup** button activates Chrome and shows this
+setup instruction; Chrome does not provide a deep link directly to this menu
+switch.
 The helper never clicks or types into the game. It only reads the small screen
 area around the cursor.
 
 ## Where data is saved
 
-- Manual prices: `~/Library/Application Support/MapleShopPriceHelper/prices.json`
 - Saved captures: `~/Library/Application Support/MapleShopPriceHelper/captures/`
 
-Nothing is uploaded by default. The two site buttons only open a browser URL.
-When `MESOS_WATCH_SESSION` is configured, the app sends read-only API requests
-for weapon catalog, summary and history data; it never bypasses Turnstile or
-reads the website. Start it like this:
-
-```bash
-MESOS_WATCH_SESSION='your_mw_s_cookie_value' ./run.sh
-```
+Nothing is uploaded by default. The app controls Chrome locally and does not
+copy pricing data from the site.
 
 ## Tests
 
@@ -112,26 +106,24 @@ shop_price_helper/
   ocr.py        macOS Vision OCR (ocrmac)
   tooltip.py    OCR lines -> item name/stats/quantity
   quantity.py   slot count -> number (12x18 pixel-font templates)
-  model.py      ShopItem, PriceQuote, PriceSummary
-  pricing.py    provider interface, manual store, source links
+  model.py      ShopItem and weapon metadata
+  catalog.py    bundled item names and categories
+  pricing.py    browser source links
   app.py        Tk window and hover loop
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the provider API,
-caching and Windows path. The captured mesos.watch endpoint reference is in
-[docs/apis.md](docs/apis.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the application structure.
+The captured mesos.watch endpoint reference is in [docs/apis.md](docs/apis.md).
 
 ## Roadmap
 
-- [ ] If an authorized price API is published, add it behind `PriceProvider`
-      (with caching/rate limits). Until then: manual prices and links only.
-- [x] Automatic slot-count reading and total-for-stack on the main panel.
+- [x] Automatic MesoWatch browser search from scanned inventory items.
 - [ ] Add 1x-display count templates (currently Retina 2x is tuned).
 - [ ] Tune tooltip-box detection against real shop screenshots (send one with
       the overlay out of the way).
 - [ ] Import/export the user's own price notes (CSV), not site datasets.
 - [ ] Match equipment stat variants more exactly; show “clean vs scrolled”.
-- [ ] Windows build (Win32 capture + the same OCR/provider layers).
+- [ ] Windows build (Win32 capture + the same OCR and browser layers).
 - [ ] A small PyInstaller app and GitHub release workflow.
 
 ## Legal

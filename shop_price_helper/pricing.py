@@ -52,7 +52,8 @@ class PriceProvider(ABC):
 
 SITE_LINKS = {
     # Browser links only. The app never fetches these pages or copies their data.
-    "MesoWatch": "https://meso.watch/?q={query}",
+    # Search is client-side, so open the page and let the app copy the name.
+    "MesoWatch": "https://meso.watch/",
     # Cozy's item search is client-side and does not read a query parameter.
     # Open the list; the app copies the item name so it can be pasted.
     "Cozy Market": "https://cozy.markets/items",
@@ -160,4 +161,3 @@ class PriceService:
             except Exception as exc:  # a provider must never break the window
                 notices.append(f"{provider.name}: {type(exc).__name__}: {exc}")
         return PriceSummary.from_quotes(quotes), notices
-

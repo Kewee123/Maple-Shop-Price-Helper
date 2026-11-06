@@ -11,13 +11,13 @@ cursor ──► capture around cursor ──► macOS Vision OCR
                                       ▼
                               ShopItem (name/stats/qty)
                                       │
-                    ┌─────────────────┴─────────────────┐
-                    ▼                                   ▼
-             manual price store              authorized providers only
-                    │                         (mesos.watch, weapons only)
-                    └─────────────────┬─────────────────┘
+                                      │
                                       ▼
-                              PriceSummary → window
+                         local item catalog validation
+                                      │
+                                      ▼
+                         Chrome MesoWatch automation
+                         (search and select item)
 ```
 
 ## Modules
@@ -76,60 +76,41 @@ The templates are for the 2x Retina rendering. A 1x capture is still attempted,
 but if the count is not confident the item keeps its previous quantity (usually
 `1`) instead of guessing.
 
-### `pricing.py`
+### `browser.py`
 
-`PriceProvider` is the seam for data sources:
+The browser automation reuses an existing MesoWatch tab when possible. It
+activates Chrome, sets the client-side `#search` input using the native DOM
+setter, waits for rendered `.item-select` results, and clicks the first match.
+Unknown OCR text is rejected by the local `data/item_catalog.json` index before
+MesoWatch is opened. It then positions and sizes Chrome below the helper in the
+available screen area outside MapleStory. The operation runs off the Tk thread
+so OCR and the UI remain responsive.
 
-```python
-class PriceProvider:
-    name: str
-    available: bool
-    def lookup(self, item: ShopItem) -> list[PriceQuote]: ...
-    def url_for(self, item: ShopItem) -> str: ...
-```
+### `catalog.py`
 
-- `ManualPriceProvider` reads `prices.json` in the app data folder.
-- `MesosWatchProvider` is an opt-in, read-only provider for weapons. It uses the
-  documented `/item/names`, `/item/summary` and `/item/{id}/history` endpoints
-  only when `MESOS_WATCH_SESSION` contains the user's own authorized `mw_s`
-  value; it never performs the Turnstile challenge.
-- `site_links()` returns browser URLs for MesoWatch and Cozy Market. Cozy item
-  endpoints still need a browser pass, so there is no automated Cozy provider.
-- `PriceService` combines quotes into a `PriceSummary`: median typical, last,
-  summed volume, low/high and suggested list price.
-
-No provider may break the window: `PriceService` catches `SourceUnavailable` and
-other exceptions and shows them as notices.
+Loads the MeowDB item index bundled with the application once and provides
+case- and punctuation-insensitive item lookup. The level suffixes displayed in
+the MeowDB A-Z page are treated as metadata, so `Jean Capris` and
+`Jean Capris (Lv 5)` resolve to the same canonical item.
 
 ### `app.py`
 
-Tk window, always-on-top by default. The watch thread captures/OCRs and pushes
-results through a `queue.Queue`; only the Tk thread touches widgets. The item
-name entry pauses OCR replacement while it has focus.
-
-## Price variant matching
-
-Equipment price depends on the exact stats. The manual store keys equipment by
-normalised name plus a variant string such as:
-
-```
-bluedragonhelmet|DEX=+1|Req Lev=30|STR=+2|Slots=7
-```
-
-If the user only has a price for a different variant, the quote is shown with a
-warning (`manual price is for a different stat variant`) rather than silently
-treated as exact. A future provider should do the same and prefer a clean item
-match over a scrolled one.
+Tk window, always-on-top by default. At startup it finds the MapleStory window
+and places the compact helper beside it. The watch thread captures/OCRs and
+pushes results through a `queue.Queue`; only the Tk thread touches widgets. The
+item name entry pauses OCR replacement while it has focus. MesoWatch window
+placement is performed once per helper session; later searches do not resize
+or move Chrome.
 
 ## Windows plan
 
-Keep the parser/provider/window layers unchanged and add:
+Keep the parser/window layers unchanged and add:
 
 - `platforms/windows_capture.py` using the existing window handle + GDI/BitBlt
   (or `mss` on Windows, which already works).
 - A Windows OCR backend (Windows.Media.Ocr is bundled with Windows 10/11; a
   Tesseract fallback is possible).
-- The same `PriceProvider` interface and manual store path (`%APPDATA%`).
+- A browser automation backend appropriate for the target platform.
 
 ## Things not to do
 

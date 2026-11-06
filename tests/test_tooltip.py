@@ -153,6 +153,16 @@ class TooltipParseTests(unittest.TestCase):
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Diamond Ore")
 
+    def test_hover_focus_prefers_tooltip_over_distant_map_labels(self):
+        item = parse([
+            line("Hidden Street", 0.92, x=0.02, width=0.20),
+            line("Free Market Entrance", 0.87, x=0.02, width=0.25),
+            line("• Firewood", 0.55, x=0.42, width=0.16),
+            line("A high quality piece of firewood", 0.50, x=0.50, width=0.30),
+        ], focus=(0.52, 0.50))
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Firewood")
+
     def test_player_name_alone_is_not_an_item(self):
         # Hovering the character name tag must not replace the item panel.
         self.assertIsNone(parse(stack("Kewee")))

@@ -20,6 +20,10 @@ from PIL import Image, ImageDraw
 
 DEFAULT_WIDTH = 760
 DEFAULT_HEIGHT = 600
+# Keep OCR local to the hovered inventory slot. This excludes most of the map,
+# minimap, chat, and other HUD text while still leaving room for the tooltip.
+OCR_WIDTH = 460
+OCR_HEIGHT = 360
 
 # mss asks CoreGraphics for a nominal-resolution image by default, which
 # downsamples a Retina display to 1x.  Keep the physical pixels instead; the
@@ -128,6 +132,19 @@ def grab(region: dict[str, int], exclude: tuple[int, int, int, int] | None = Non
         if x1 > x0 and y1 > y0:
             ImageDraw.Draw(image).rectangle([x0, y0, x1 - 1, y1 - 1], fill=(0, 0, 0))
     return image
+
+
+def crop_for_ocr(image: Image.Image, cursor_px: tuple[float, float]) -> tuple[Image.Image, tuple[float, float]]:
+    """Keep OCR near the hovered slot while retaining the full image for counts."""
+    width, height = image.size
+    crop_width = min(width, int(OCR_WIDTH * width / 760))
+    crop_height = min(height, int(OCR_HEIGHT * height / 600))
+    cx, cy = cursor_px
+    left = max(0, min(int(cx - crop_width / 2), width - crop_width))
+    top = max(0, min(int(cy - crop_height / 2), height - crop_height))
+    cropped = image.crop((left, top, left + crop_width, top + crop_height))
+    focus = ((cx - left) / crop_width, 1 - (cy - top) / crop_height)
+    return cropped, focus
 
 
 def frame_difference(a: Image.Image | None, b: Image.Image) -> float:

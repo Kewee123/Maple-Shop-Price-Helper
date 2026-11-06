@@ -82,8 +82,8 @@ class ManualStoreTests(unittest.TestCase):
     def test_site_links_encode_names(self):
         item = ShopItem(name="Blue Dragon Helmet")
         links = dict(site_links(item))
-        self.assertIn("Blue+Dragon+Helmet", links["MesoWatch"])
-        # Cozy's search is client-side, so it opens the list instead of a dead query.
+        self.assertEqual(links["MesoWatch"], "https://meso.watch/")
+        # Both sites use client-side search, so they open the list instead of a dead query.
         self.assertEqual(links["Cozy Market"], "https://cozy.markets/items")
 
 

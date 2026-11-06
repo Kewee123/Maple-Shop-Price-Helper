@@ -10,14 +10,22 @@ browser link when the user clicks a button.
 - **Do not copy it.** Do not scrape, crawl, download, mirror, store its table or
   build a dataset from it. MesoWatch's terms explicitly forbid automated
   collection and building an app/product from its data.
-- This app does not ask for access and does not implement a MesoWatch provider.
-- Clicking **Open MesoWatch** only opens:
+- This app does not access MesoWatch data directly. It automates the user's
+  local Chrome tab to search for the scanned item.
+- Before MesoWatch is opened, the OCR name is checked against the public
+  MeowDB MapleStory Classic Item Database A-Z index. The app only uses the
+  exact item name returned by that index and does not copy market data.
+- Clicking **Search item in MesoWatch** opens:
 
-  `https://meso.watch/?q=<item name>`
+  `https://meso.watch/`
 
-  in the user's browser. The app never reads the page or saves its contents.
-- Manual prices in the app are the user's own notes. They are not a copy of
-  MesoWatch's data and stay on the user's computer.
+  in the user's browser. With macOS browser automation permission enabled, it
+  fills the client-side search box and clicks the first matching item. Without
+  that permission, it copies the OCR-read item name so the user can paste it
+  manually. The app never reads or saves market data.
+- The **Chrome setup** button activates Chrome and shows the exact
+  macOS menu-bar path: `Develop → Allow JavaScript from Apple Events`.
+  Chrome does not expose this menu switch through a direct settings URL.
 
 ## Cozy Market
 
@@ -31,24 +39,21 @@ browser link when the user clicks a button.
 
   and copies the item name to the clipboard so the user can paste it into
   Cozy's own search box. (Cozy's search is client-side; it ignores `?q=`.)
-- If Cozy Market ever publishes an official third-party API, it can be added
-  behind the `PriceProvider` interface after reading its terms.
+- If Cozy Market ever publishes an official third-party API, it can be
+  considered separately after reading its terms.
 
 ## What the app does instead
 
-1. **Manual price notes** — the user types what they found (or their own sale
-   data) into **Set price…**. Stored only in:
+1. **Browser automation** — the app enters the OCR-read item name into the
+   user's existing MesoWatch tab and selects the matching result.
 
-   `~/Library/Application Support/MapleShopPriceHelper/prices.json`
+2. **Manual fallback** — if browser automation is unavailable, the item name is
+   copied so the user can paste it into MesoWatch themselves.
 
-2. **Browser links** — the user checks the live site themselves.
-
-3. **Future, only with permission** — an authorized API or a CSV of the user's
-   own notes. No site datasets.
+3. **No site data is stored** — prices remain visible only in the user's browser.
 
 ## Do not
 
 - Do not add a scraper, headless browser, Turnstile bypass, or proxy for either
   site.
 - Do not add bundled/exported MesoWatch price tables.
-- Do not ship a provider that silently reads a site.

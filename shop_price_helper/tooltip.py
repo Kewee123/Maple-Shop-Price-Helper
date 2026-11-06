@@ -204,10 +204,12 @@ def _score(block: list[TextLine], focus: tuple[float, float] = (0.5, 0.5)) -> fl
     cx = sum(line.center_x for line in block) / len(block)
     cy = sum(line.center_y for line in block) / len(block)
     distance = abs(cx - focus[0]) + abs(cy - focus[1])
+    if distance > 0.65:
+        return -20.0
     found = _item_name(block)
     name_bonus = _name_likeness(found[0]) if found else -10.0
     return (len(block) * 1.0 + stat_lines * 3.0 + confidence * 2.0
-            - distance * 8.0 + name_bonus * 2.0)
+            - distance * 16.0 + name_bonus * 2.0)
 
 
 def _item_name(block: list[TextLine]) -> tuple[str, int] | None:
@@ -265,6 +267,8 @@ def parse(lines: Iterable[TextLine], focus: tuple[float, float] | None = None) -
 
     blocks = _blocks(clean)
     block = max(blocks, key=lambda found: _score(found, focus))
+    if _score(block, focus) < -10.0:
+        return None
     found = _item_name(block)
     if not found:
         return None
