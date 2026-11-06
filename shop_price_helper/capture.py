@@ -22,8 +22,8 @@ DEFAULT_WIDTH = 760
 DEFAULT_HEIGHT = 600
 # Keep OCR local to the hovered inventory slot. This excludes most of the map,
 # minimap, chat, and other HUD text while still leaving room for the tooltip.
-OCR_WIDTH = 460
-OCR_HEIGHT = 360
+OCR_WIDTH = 600
+OCR_HEIGHT = 560
 
 # mss asks CoreGraphics for a nominal-resolution image by default, which
 # downsamples a Retina display to 1x.  Keep the physical pixels instead; the
@@ -141,6 +141,8 @@ def crop_for_ocr(image: Image.Image, cursor_px: tuple[float, float]) -> tuple[Im
     crop_height = min(height, int(OCR_HEIGHT * height / 600))
     cx, cy = cursor_px
     left = max(0, min(int(cx - crop_width / 2), width - crop_width))
+    # Tooltips can render below upper rows or above lower rows. Keep the
+    # cursor centered so every inventory tab and row gets the same coverage.
     top = max(0, min(int(cy - crop_height / 2), height - crop_height))
     cropped = image.crop((left, top, left + crop_width, top + crop_height))
     focus = ((cx - left) / crop_width, 1 - (cy - top) / crop_height)
@@ -216,13 +218,35 @@ def window_under_cursor(x: int, y: int) -> WindowInfo | None:
 
 
 def is_game_window(window: WindowInfo | None) -> bool:
-    """MapleStory itself, or the wrapper a Mac player commonly runs it in."""
+    """Allow MapleStory itself or its known Mac game wrappers."""
     if window is None:
         return False
-    text = f"{window.owner} {window.title}".lower()
-    if "maplestory" in text:
+    owner = window.owner.lower()
+    title = window.title.lower()
+    if "maplestory" in owner:
         return True
-    return window.owner.lower() in {
+    wrappers = (
         "crossover", "whisky", "wine", "wine64", "wine-preloader",
-        "parallels desktop", "parallels",
-    }
+        "parallels",
+    )
+    return any(wrapper in owner for wrapper in wrappers) and "maplestory" in title
+
+
+def inventory_rect(window: WindowInfo) -> tuple[int, int, int, int]:
+    """Approximate the Classic inventory panel in a game window.
+
+    MapleStory's inventory is anchored near the upper-left of the client and
+    scales with the game window. Keeping this boundary here prevents animated
+    map pixels from driving OCR when the cursor is not over inventory slots.
+    """
+    return (
+        window.left + int(window.width * 0.04),
+        window.top + int(window.height * 0.03),
+        window.left + int(window.width * 0.60),
+        window.top + int(window.height * 0.80),
+    )
+
+
+def point_in_rect(point: tuple[int, int], rect: tuple[int, int, int, int]) -> bool:
+    left, top, right, bottom = rect
+    return left <= point[0] <= right and top <= point[1] <= bottom

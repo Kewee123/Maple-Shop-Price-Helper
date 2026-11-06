@@ -204,12 +204,15 @@ def _score(block: list[TextLine], focus: tuple[float, float] = (0.5, 0.5)) -> fl
     cx = sum(line.center_x for line in block) / len(block)
     cy = sum(line.center_y for line in block) / len(block)
     distance = abs(cx - focus[0]) + abs(cy - focus[1])
+    # The game cursor is the anchor for the tooltip. Prefer the block nearest
+    # that anchor over a farther block that happens to contain more prose.
+    cursor_weight = 28.0
     if distance > 0.65:
         return -20.0
     found = _item_name(block)
     name_bonus = _name_likeness(found[0]) if found else -10.0
     return (len(block) * 1.0 + stat_lines * 3.0 + confidence * 2.0
-            - distance * 16.0 + name_bonus * 2.0)
+            - distance * cursor_weight + name_bonus * 2.0)
 
 
 def _item_name(block: list[TextLine]) -> tuple[str, int] | None:

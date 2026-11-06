@@ -36,7 +36,7 @@ def search_mesowatch(
     typed_js = (
         "(() => {const input=document.querySelector('#search');"
         "if (!input) throw new Error('MesoWatch search box not found');"
-        f"const name=atob('{encoded_name}');input.scrollIntoView({{block:'center'}});"
+        f"const name=atob('{encoded_name}');"
         "input.focus();input.select();"
         "const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;"
         "setter.call(input,name);"
@@ -55,31 +55,41 @@ def search_mesowatch(
 
     placement = ""
     if anchor and screen_size:
-        left, top, right, bottom = anchor
+        helper_left, helper_top, helper_right, helper_bottom = anchor
         screen_width, screen_height = screen_size
         gap = 12
         margin = 20
-        browser_width = min(900, max(480, int(screen_width * 0.58)))
-        browser_height = min(520, max(380, int(screen_height * 0.60)))
-        below_height = screen_height - bottom - gap - margin
-        browser_height = min(browser_height, max(260, below_height))
-        if avoid_rect:
-            game_left, game_top, game_right, game_bottom = avoid_rect
-            available_left = max(margin, game_right + gap)
-            available_width = screen_width - available_left - margin
-            if available_width >= 480:
-                browser_width = min(browser_width, available_width)
-                window_left = available_left
-            else:
-                window_left = max(margin, screen_width - browser_width - margin)
+        min_width = min(480, max(260, screen_width - 2 * margin))
+        max_width = min(900, max(min_width, int(screen_width * 0.58)))
+        max_height = min(520, max(300, int(screen_height * 0.60)))
+
+        # Prefer the space immediately to the right of the helper. If the
+        # helper is near an edge, use below, then left, without covering it.
+        right_width = screen_width - helper_right - gap - margin
+        left_width = helper_left - gap - margin
+        below_height = screen_height - helper_bottom - gap - margin
+        if right_width >= min_width:
+            window_left = helper_right + gap
+            window_top = max(margin, helper_top)
+            browser_width = min(max_width, right_width)
+            browser_height = min(max_height, screen_height - window_top - margin)
+        elif below_height >= 260:
+            window_left = max(margin, min(helper_left, screen_width - max_width - margin))
+            window_top = helper_bottom + gap
+            browser_width = min(max_width, screen_width - window_left - margin)
+            browser_height = min(max_height, below_height)
+        elif left_width >= min_width:
+            browser_width = min(max_width, left_width)
+            window_left = helper_left - gap - browser_width
+            window_top = max(margin, helper_top)
+            browser_height = min(max_height, screen_height - window_top - margin)
         else:
+            browser_width = min(max_width, screen_width - 2 * margin)
+            browser_height = min(max_height, screen_height - 2 * margin)
             window_left = max(margin, screen_width - browser_width - margin)
-        # Keep MesoWatch below the helper when possible. This is also the
-        # first placement that avoids the MapleStory window's right edge.
-        if below_height >= 260:
-            window_top = bottom + gap
-        else:
             window_top = max(margin, screen_height - browser_height - margin)
+        browser_width = max(min_width, browser_width)
+        browser_height = max(260, browser_height)
         window_right = window_left + browser_width
         window_bottom = window_top + browser_height
         placement = (
@@ -114,22 +124,22 @@ on run
             set targetWindow to front window
             set targetTab to make new tab at end of tabs of targetWindow with properties {URL:"https://meso.watch/"}
             set targetIndex to (count tabs of targetWindow)
-            delay 2
+            delay 0.5
         end if
         __PLACEMENT__
         set index of targetWindow to 1
         set active tab index of targetWindow to targetIndex
         tell targetTab
-            repeat 30 times
-                delay 0.25
+        repeat 50 times
+            delay 0.1
                 try
                     if (execute javascript "document.readyState === 'complete' && (() => {const e=document.querySelector('#search'); if (!e) return false; const r=e.getBoundingClientRect(); return !e.disabled && r.width > 0 && r.height > 0})()") is "true" then exit repeat
                 end try
             end repeat
             set typedResult to execute javascript "__TYPED_JS__"
             if typedResult is not "__ITEM_B64__" then error "MesoWatch search text was not entered"
-            repeat 40 times
-                delay 0.25
+        repeat 100 times
+            delay 0.1
                 try
                     set resultCount to execute javascript "document.querySelectorAll('.item-select').length"
                     if resultCount > 0 then

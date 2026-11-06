@@ -30,13 +30,17 @@ cursor ──► capture around cursor ──► macOS Vision OCR
 - `grab()` returns an RGB `PIL.Image` at the display's native pixel scale (2x on
   Retina), with the helper's own window blacked out in image coordinates.
 - `frame_difference()` is a downscaled mean-absolute-difference check, so OCR
-  only runs when a tooltip actually appears/changes.
+  only runs when the cursor-centered inventory/tooltip crop actually
+  appears/changes; animated map pixels outside that crop are ignored.
 - `screen_recording_granted()` / `request_screen_recording()` wrap the
   CoreGraphics permission helpers.
 - `open_screen_recording_settings()` opens the right System Settings pane.
 
 The cursor is read from the background loop, not from Tk, so the UI can stay
-responsive. The loop skips while the cursor is over the helper's own window.
+responsive. The loop skips while the cursor is over the helper's own window or
+an unrelated window; supported wrappers must also identify MapleStory in their
+window title. It also skips cursor positions outside the MapleStory inventory
+panel.
 
 ### `ocr.py`
 
@@ -56,6 +60,8 @@ A shop capture includes chat and HUD text. The parser:
 2. groups lines that sit on top of each other;
 3. scores groups by line count, stat-like lines and proximity to the capture
    centre;
+- strongly prefers the tooltip block nearest the cursor anchor when multiple
+   tooltip blocks are visible;
 4. takes the first non-stat line as the item name;
 5. extracts numbers with a small OCR fix (`3O` → `30`, `Slots` stays `Slots`);
 6. derives quantity and a variant signature for equipment.
@@ -82,9 +88,9 @@ The browser automation reuses an existing MesoWatch tab when possible. It
 activates Chrome, sets the client-side `#search` input using the native DOM
 setter, waits for rendered `.item-select` results, and clicks the first match.
 Unknown OCR text is rejected by the local `data/item_catalog.json` index before
-MesoWatch is opened. It then positions and sizes Chrome below the helper in the
-available screen area outside MapleStory. The operation runs off the Tk thread
-so OCR and the UI remain responsive.
+MesoWatch is opened. It then positions and sizes Chrome beside the helper,
+falling back to below, left, or the available screen edge. The operation runs
+off the Tk thread so OCR and the UI remain responsive.
 
 ### `catalog.py`
 
@@ -99,8 +105,8 @@ Tk window, always-on-top by default. At startup it finds the MapleStory window
 and places the compact helper beside it. The watch thread captures/OCRs and
 pushes results through a `queue.Queue`; only the Tk thread touches widgets. The
 item name entry pauses OCR replacement while it has focus. MesoWatch window
-placement is performed once per helper session; later searches do not resize
-or move Chrome.
+placement is performed when the helper moves to a different position; later
+searches at the same helper position do not resize or move Chrome.
 
 ## Windows plan
 

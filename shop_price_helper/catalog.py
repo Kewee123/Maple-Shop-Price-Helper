@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from functools import lru_cache
+from difflib import get_close_matches
 from pathlib import Path
 
 from .model import normalize_name
@@ -49,7 +50,15 @@ def lookup(name: str) -> CatalogItem | None:
     """Return the canonical local item for an OCR or manually entered name."""
     if not name.strip():
         return None
-    return _items_by_name().get(_lookup_key(name))
+    items = _items_by_name()
+    exact = items.get(_lookup_key(name))
+    if exact is not None:
+        return exact
+    key = _lookup_key(name)
+    if len(key) < 5:
+        return None
+    matches = get_close_matches(key, items.keys(), n=2, cutoff=0.86)
+    return items[matches[0]] if len(matches) == 1 else None
 
 
 def clear_cache() -> None:

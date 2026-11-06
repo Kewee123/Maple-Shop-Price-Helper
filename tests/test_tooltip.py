@@ -125,6 +125,12 @@ class TooltipParseTests(unittest.TestCase):
         item = parse(stack("ITEM INVENTORY", "Equip", "Use", "Set Up", "Etc", "Cash", "Deco"))
         self.assertIsNone(item)
 
+    def test_all_inventory_tab_labels_are_ignored(self):
+        labels = ("Equip", "Use", "Set Up", "Etc", "Cash", "Deco")
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertIsNone(parse([line(label, 0.80)]))
+
     def test_hover_bullet_is_stripped_from_item_name(self):
         item = parse([line("• Diamond Ore", 0.52, x=0.18, width=0.13),
                       line("The ore of a transparent jewel.", 0.48, x=0.29, width=0.22)])
@@ -162,6 +168,16 @@ class TooltipParseTests(unittest.TestCase):
         ], focus=(0.52, 0.50))
         self.assertIsNotNone(item)
         self.assertEqual(item.name, "Firewood")
+
+    def test_hover_focus_prefers_nearer_tooltip_when_two_are_visible(self):
+        item = parse([
+            line("Grey T-Shirt (M)", 0.68, x=0.25, width=0.18),
+            line("Type: Top", 0.63, x=0.25, width=0.12),
+            line("Blue Sauna Robe (M)", 0.68, x=0.66, width=0.22),
+            line("Req Lev: 30", 0.63, x=0.66, width=0.14),
+        ], focus=(0.32, 0.64))
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Grey T-Shirt (M)")
 
     def test_player_name_alone_is_not_an_item(self):
         # Hovering the character name tag must not replace the item panel.

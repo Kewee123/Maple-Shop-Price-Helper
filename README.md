@@ -15,8 +15,11 @@ searches reuse that browser layout and only update the search.
 ## What works
 
 - Reads the item tooltip near the cursor with macOS Vision OCR (no Tesseract
-  download and no screen-recording cloud service). Works for shop rows and
-  inventory slots; inventory tabs, quest text and hover bullets are ignored.
+  download and no screen-recording cloud service). Scanning is limited to the
+  MapleStory inventory area and works across the Equip, Use, Set Up, Etc, Cash,
+  and Deco tabs. The OCR crop is centered on the cursor so tooltips above or
+  below a slot remain visible. Inventory tabs, quest text and hover bullets are
+  ignored.
 - Keeps the item name, stats (Req Lev, STR/DEX/INT/LUK, attack/defence, slots)
   and quantity.
 - Reads the stack count automatically from the bottom-left of the hovered
@@ -37,9 +40,9 @@ searches reuse that browser layout and only update the search.
 ## Current limits
 
 - Mac only for now.
-- It only reads while the cursor is over a recognised game window: MapleStory,
-  CrossOver, Whisky, Wine or Parallels. A browser game stream will need a window
-  picker (roadmap).
+- It only reads while the cursor is over MapleStory or a supported wrapper
+  whose window title identifies MapleStory. Browsers and unrelated windows are
+  rejected as scan sources.
 - Tooltip OCR is best-effort; the item name is editable. **Save capture** writes
   the exact crop if a hover is misread, which makes parser tuning quick.
 - Slot-count reading is tuned for the 2x Retina rendering used by the Mac client.

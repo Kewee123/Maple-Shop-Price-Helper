@@ -19,6 +19,11 @@ class CatalogTests(unittest.TestCase):
         self.assertIsNone(lookup("MapleStory World 31"))
         self.assertIsNone(lookup(""))
 
+    def test_small_ocr_error_can_resolve_uniquely(self):
+        item = lookup("Firewcod")
+        self.assertIsNotNone(item)
+        self.assertEqual(item.name, "Firewood")
+
 
 if __name__ == "__main__":
     unittest.main()

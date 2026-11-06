@@ -76,7 +76,9 @@ class ShopPriceApp:
         self._candidate_count = 0
         self._candidate_item = None
         self._candidate_window = None
-        self._browser_layout_done = False
+        self._browser_anchor = None
+        self._browser_lock = threading.Lock()
+        self._browser_generation = 0
         self._startup_positioned = False
 
         self._build()
@@ -269,6 +271,7 @@ class ShopPriceApp:
         last_pos = None
         stable_since = 0.0
         last_frame = None
+        last_ocr_frame = None
         last_processed = 0.0
         last_note = ""
         while not self._stop.is_set():
@@ -293,6 +296,16 @@ class ShopPriceApp:
                     last_note = note
                 time.sleep(0.35)
                 continue
+            if not capture.point_in_rect(pos, capture.inventory_rect(window)):
+                note = "Move the cursor over an inventory item."
+                if note != last_note:
+                    self._queue.put(("status", note))
+                    last_note = note
+                last_pos = None
+                last_frame = None
+                last_ocr_frame = None
+                time.sleep(0.15)
+                continue
             window_id = (window.number, window.pid)
             note = f"Watching {window.owner} · {window.title}".strip(" ·")
             self._game_rect = (
@@ -309,7 +322,7 @@ class ShopPriceApp:
             if forced:
                 self._force_read.clear()
             elif last_pos is None or abs(pos[0] - last_pos[0]) + abs(pos[1] - last_pos[1]) > 3:
-                last_pos, stable_since, last_frame = pos, now, None
+                last_pos, stable_since, last_frame, last_ocr_frame = pos, now, None, None
                 continue
             elif now - stable_since < 0.15 or now - last_processed < 0.20:
                 time.sleep(0.05)
@@ -324,9 +337,6 @@ class ShopPriceApp:
                 self._queue.put(("error", f"Capture failed: {exc}"))
                 time.sleep(0.5)
                 continue
-            if not forced and last_frame is not None and capture.frame_difference(last_frame, image) < 2.0:
-                time.sleep(0.2)
-                continue
             last_frame = image
             last_processed = now
             scale_x = image.width / region["width"]
@@ -338,8 +348,20 @@ class ShopPriceApp:
             self._last_cursor = (cursor_px, (scale_x + scale_y) / 2)
             try:
                 ocr_image, ocr_focus = capture.crop_for_ocr(image, cursor_px)
+                if (not forced and last_ocr_frame is not None
+                        and capture.frame_difference(last_ocr_frame, ocr_image) < 2.0):
+                    time.sleep(0.15)
+                    continue
                 lines = ocr.recognize(ocr_image)
                 item = tooltip.parse(lines, ocr_focus)
+                # Do not mark an unreadable frame as complete. Vision can
+                # transiently miss a tooltip while MapleStory is repainting
+                # it; retrying the same hover is preferable to waiting for
+                # the user to move away and back.
+                if item is None:
+                    time.sleep(0.08)
+                    continue
+                last_ocr_frame = ocr_image
                 self._apply_screen_quantity(item, image)
                 # OCR can take long enough for the cursor to move to another
                 # slot. Never let a result for the old hover replace the new
@@ -451,6 +473,21 @@ class ShopPriceApp:
             self._set_status("Text found, but no item tooltip in it. Move over an item and hold still.")
             self._raw_lines([line.text for line in lines])
             return
+        # OCR often changes punctuation or drops a character between frames.
+        # Resolve that noise against the local catalog before deciding whether
+        # this is a new hover target, so switching slots cannot get stuck in
+        # the previous item's confirmation state.
+        catalog_item = catalog.lookup(item.name)
+        if catalog_item is not None:
+            item = item.renamed(catalog_item.name)
+            item.category = item.category or catalog_item.category.casefold()
+        else:
+            self._candidate_name = ""
+            self._candidate_count = 0
+            self._candidate_item = None
+            self._set_status(f"Checking item name: {item.name}…")
+            self._raw_lines(item.lines)
+            return
         current_window = capture.window_under_cursor(*capture.mouse_position()) if capture.mouse_position() else None
         window_id = (
             (current_window.number, current_window.pid)
@@ -461,14 +498,18 @@ class ShopPriceApp:
             self._candidate_count = 0
             self._candidate_item = None
             self._candidate_window = window_id
-        if item.name == self._candidate_name:
+        candidate_key = catalog_item.name
+        if candidate_key == self._candidate_name:
             self._candidate_count += 1
         else:
-            self._candidate_name = item.name
+            self._candidate_name = candidate_key
             self._candidate_count = 1
             self._candidate_item = item
         self._raw_lines(item.lines)
-        if self._candidate_count < 2:
+        # The local catalog is a strong second signal. Requiring another OCR
+        # frame makes fast inventory changes feel stuck, especially for simple
+        # drops such as Firewood that have no stat lines.
+        if self._candidate_count < 1:
             self._set_status(f"Confirming {item.name}…")
             return
         item = self._candidate_item or item
@@ -565,6 +606,8 @@ class ShopPriceApp:
             if name == which:
                 if name == "MesoWatch":
                     item = self.item
+                    self._browser_generation += 1
+                    browser_generation = self._browser_generation
                     self._set_status(f"Opening MesoWatch for {item.name}…")
                     anchor = self._own_rect
                     game_rect = self._game_rect
@@ -572,9 +615,11 @@ class ShopPriceApp:
                         self.root.winfo_screenwidth(),
                         self.root.winfo_screenheight(),
                     )
-                    should_position_browser = not self._browser_layout_done
+                    should_position_browser = (
+                        anchor is not None and anchor != self._browser_anchor
+                    )
                     if should_position_browser:
-                        self._browser_layout_done = True
+                        self._browser_anchor = anchor
 
                     def search() -> None:
                         try:
@@ -584,12 +629,18 @@ class ShopPriceApp:
                                 raise ValueError("item name was not found in the local database")
                             canonical_name = match.name
                             self._queue.put(("validated", item, canonical_name))
-                            browser.search_mesowatch(
-                                canonical_name,
-                                anchor=anchor if should_position_browser else None,
-                                screen_size=screen_size if should_position_browser else None,
-                                avoid_rect=game_rect if should_position_browser else None,
-                            )
+                            with self._browser_lock:
+                                # A previous AppleScript call may still be
+                                # finishing. Do not let it overwrite the
+                                # newest hovered item in Chrome.
+                                if browser_generation != self._browser_generation:
+                                    return
+                                browser.search_mesowatch(
+                                    canonical_name,
+                                    anchor=anchor if should_position_browser else None,
+                                    screen_size=screen_size if should_position_browser else None,
+                                    avoid_rect=game_rect if should_position_browser else None,
+                                )
                         except (browser.BrowserAutomationUnavailable, ValueError) as exc:
                             self._queue.put(("validation_failed", item, str(exc)))
                         else:
